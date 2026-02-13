@@ -23,7 +23,7 @@ Node-RED Erweiterung fuer Deye/Pylontech-kompatible BMS-Kommunikation ueber RS48
 
 ## Dateistruktur
 - `docs/DASHBOARD_SERVICE.md` Bedienung Service-Seite
-- `docs/PROTOCOL_NOTES.md` Reverse-Engineering / Service-Mapping
+- `docs/PROTOCOL_RS485_1363.md` Reverse-Engineering / Service-Mapping (Frameformat, CRC, Layouts, Snippets)
 - `docs/DEPLOY_NODE_RED.md` Backup, Restore, Restart
 - `node-red/flows.rs485-service.snapshot.json` Flow-Snapshot
 - `scripts/backup-flows.sh` Backup-Helper
