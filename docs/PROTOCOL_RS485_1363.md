@@ -1,5 +1,16 @@
 # RS485 ASCII Protocol (CID1=4A, CID2 Services) - Reverse Engineered
 
+## Inhaltsverzeichnis
+- [Transport](#transport)
+- [Frameformat (ASCII)](#frameformat-ascii)
+- [LEN (LENID + LCS)](#len-lenid--lcs)
+- [CRC (16-bit)](#crc-16-bit)
+- [Request/Response Grundregel](#requestresponse-grundregel)
+- [INFO Feld (Service-abhaengig)](#info-feld-service-abhaengig)
+- [Write/Control Services](#writecontrol-services)
+- [Referenz-Implementierungen](#referenz-implementierungen)
+- [Praktische Hinweise / Pitfalls](#praktische-hinweise--pitfalls)
+
 Ziel: Diese Datei beschreibt das auf dem Bus beobachtete ASCII-Frameformat sowie die aktuell dekodierten Services so, dass man Implementierungen in beliebigen Sprachen (Python/Java/C/Go/...) bauen kann.
 
 Quelle der Fakten:
@@ -108,19 +119,21 @@ Request INFO:
 - `INFO = <ADR>`
 
 Response Layout (alle Werte 2 Byte, aber im Frame als 4 Hexchars pro Wert):
-1. `dataflag` u8
-2. `cell_v_hi` u16 /100
-3. `cell_v_lo` u16 /100
-4. `cell_v_uv` u16 /100
-5. `chg_t_hi` i16 -> temp (Kelvin*10 oder Celsius*10)
-6. `chg_t_lo` i16 -> temp
-7. `chg_i_lim` i16 /100 (A)
-8. `pack_v_hi` u16 /100
-9. `pack_v_lo` u16 /100
-10. `pack_v_uv` u16 /100
-11. `dch_t_hi` i16 -> temp
-12. `dch_t_lo` i16 -> temp
-13. `dch_i_lim` i16 /100
+| Index | Feld | Typ | Skalierung/Decode |
+|---:|---|---|---|
+| 1 | `dataflag` | u8 | raw |
+| 2 | `cell_v_hi` | u16 | `/100` |
+| 3 | `cell_v_lo` | u16 | `/100` |
+| 4 | `cell_v_uv` | u16 | `/100` |
+| 5 | `chg_t_hi` | i16 | `guessTempToC()` |
+| 6 | `chg_t_lo` | i16 | `guessTempToC()` |
+| 7 | `chg_i_lim` | i16 | `/100` A |
+| 8 | `pack_v_hi` | u16 | `/100` |
+| 9 | `pack_v_lo` | u16 | `/100` |
+| 10 | `pack_v_uv` | u16 | `/100` |
+| 11 | `dch_t_hi` | i16 | `guessTempToC()` |
+| 12 | `dch_t_lo` | i16 | `guessTempToC()` |
+| 13 | `dch_i_lim` | i16 | `/100` A |
 
 Anmerkung:
 - In UI/Doku solltest du diese Werte ggf. normalisieren (z.B. /10 oder /1000) falls die Quelle anders skaliert. Node-RED macht im UI eine Normalisierungsschicht.
@@ -252,4 +265,3 @@ static boolean verify(String frame) {
 - Responses koennen "gechunked" kommen (Serial liefert Teilstrings). Daher: RX-Buffer und Frame-Splitter implementieren.
 - Service-Erkennung: wenn Response selbst nicht eindeutig ist, nutze Request/Response-Korrelation (zuletzt gesendetes `CID2` pro Adresse).
 - Temperatur: manche BMS senden Kelvin*10. Node-RED nutzt: wenn raw > 1000 => Kelvin10, sonst Celsius10.
-
