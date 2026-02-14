@@ -37,6 +37,26 @@ import paho.mqtt.client as mqtt
 def _now() -> float:
     return time.time()
 
+def _with_ble_lock(fn, *, timeout_s: float = 30.0):
+    """
+    Serialize BLE operations across multiple processes (JK gateway + DALY gateway).
+    BlueZ can fail with InProgress/Notify acquired when two processes use the same adapter.
+    """
+    import fcntl
+
+    lock_path = os.environ.get("BMS_BLE_LOCK_PATH", "/tmp/bms_ble.lock")
+    deadline = time.time() + float(timeout_s)
+    with open(lock_path, "w", encoding="utf-8") as f:
+        while True:
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.time() >= deadline:
+                    raise TimeoutError("BLE lock timeout")
+                time.sleep(0.1)
+        return fn()
+
 
 def _load_json(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
@@ -49,21 +69,24 @@ def _env_default(name: str, default: Optional[str]) -> Optional[str]:
 
 
 def _run_read(python: str, address: str, adapter: Optional[str], timeout_s: float, scan_timeout_s: float) -> Dict[str, Any]:
-    cmd = [
-        python,
-        "-u",
-        os.path.join(os.path.dirname(__file__), "jk_ble_read.py"),
-        "--address",
-        address,
-        "--timeout",
-        str(timeout_s),
-        "--scan-timeout",
-        str(scan_timeout_s),
-    ]
-    if adapter:
-        cmd += ["--adapter", adapter]
+    def _do():
+        cmd = [
+            python,
+            "-u",
+            os.path.join(os.path.dirname(__file__), "jk_ble_read.py"),
+            "--address",
+            address,
+            "--timeout",
+            str(timeout_s),
+            "--scan-timeout",
+            str(scan_timeout_s),
+        ]
+        if adapter:
+            cmd += ["--adapter", adapter]
 
-    p = subprocess.run(cmd, capture_output=True, text=True)
+        return subprocess.run(cmd, capture_output=True, text=True)
+
+    p = _with_ble_lock(_do, timeout_s=max(30.0, float(timeout_s) + float(scan_timeout_s) + 10.0))
     # jk_ble_read.py always prints JSON; in worst case, still provide a JSON envelope here.
     out = (p.stdout or "").strip()
     if not out:
