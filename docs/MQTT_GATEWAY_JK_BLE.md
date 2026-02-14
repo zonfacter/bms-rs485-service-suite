@@ -108,6 +108,19 @@ Empfohlenes Pattern:
 Test in Node-RED:
 - `mqtt in` (Topic `bms/jk/jk1/raw`) -> `json` -> UI
 
+## 48h Verlauf (ohne externe Datenbank)
+
+Das Dashboard nutzt `ui_chart` mit `removeOlder=48` Stunden.
+Zusaetzlich speichert Node-RED einen kleinen 48h Ringbuffer im Flow-Context (RAM), damit man die Daten auch per REST exportieren kann.
+
+REST Endpoints:
+- Latest (raw + metrics): `GET /jk/jk1/latest`
+- History (letzte 48h, lightweight metrics): `GET /jk/jk1/history48h`
+
+Hinweis:
+- Das ist keine persistente Datenbank. Nach Node-RED Restart ist der RAM-Verlauf leer.
+- Fuer echte Historie (Tage/Wochen) nutze InfluxDB/Prometheus o.a. und schreibe/scrape dort hinein.
+
 ## Troubleshooting
 
 ### DeviceNotFound (Scan findet MAC nicht)
@@ -135,4 +148,3 @@ Fix:
 ```bash
 sudo systemctl restart jk-ble-mqtt-gateway
 ```
-
