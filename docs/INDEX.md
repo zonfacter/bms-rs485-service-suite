@@ -9,6 +9,7 @@ Diese Seite ist das Inhaltsverzeichnis fuer das Repo. Sie ist absichtlich:
 - Mappings (Command IDs, Passwort, Module): [`MAPPINGS.md`](MAPPINGS.md)
 - Dashboard Bedienung (Node-RED UI): [`DASHBOARD_SERVICE.md`](DASHBOARD_SERVICE.md)
 - Backup/Restore/Restart (Betrieb): [`DEPLOY_NODE_RED.md`](DEPLOY_NODE_RED.md)
+- JK-BMS BLE via MQTT (Gateway + Topics + Schema): [`MQTT_GATEWAY_JK_BLE.md`](MQTT_GATEWAY_JK_BLE.md)
 
 ## Was ist implementiert?
 - Frame Builder (ASCII, CID1=4A, CID2 variabel) inkl. LEN/LCS und 16-bit ASCII-Checksum
@@ -22,6 +23,7 @@ Diese Seite ist das Inhaltsverzeichnis fuer das Repo. Sie ist absichtlich:
 - Write/Control:
 - `49` (Set Basic Params) Subset (Cell/Pack/Charge-Limit)
 - `45`/`8B` ACK generisch (Layout noch nicht voll dekodiert)
+- JK BLE -> MQTT Gateway (Bluetooth/BlueZ + Mosquitto) fuer JK-BMS (Lesen, optional Trigger Read)
 
 ## Fuer Entwickler (Python/Java/C/...)
 Die Kernpunkte, die du in jeder Implementierung brauchst:
@@ -42,4 +44,3 @@ Ich brauche:
 Ausgabe als JSON Objekte mit Feldnamen wie in der Spec.
 Sprache: <DEINE SPRACHE>.
 ```
-

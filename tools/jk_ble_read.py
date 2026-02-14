@@ -14,9 +14,12 @@ import argparse
 import asyncio
 import json
 import time
+import traceback
 from struct import unpack_from, calcsize
 
-from bleak import BleakClient, exc
+from bleak import BleakClient, BleakScanner, exc
+from bleak.backends.device import BLEDevice
+from bleak.backends.bluezdbus.manager import get_global_bluez_manager
 
 CHAR_UUID = "0000ffe1-0000-1000-8000-00805f9b34fb"
 CHAR_HANDLE_FAILOVER = 4
@@ -284,95 +287,211 @@ class JKDecoder:
         return None
 
 
+async def _ble_device_from_bluez_cache(address: str, adapter: str | None) -> BLEDevice | None:
+    """
+    Avoid scan-based device resolution when BlueZ already knows the device.
+    Many JK BLE modules stop advertising when connected/busy; Bleak's default
+    connect path scans to resolve a device path and can fail in that case.
+    """
+    try:
+        mgr = await get_global_bluez_manager()
+        await mgr.async_init()
+    except Exception:
+        return None
+
+    want_addr = (address or "").strip().upper()
+    if not want_addr:
+        return None
+
+    adapter_prefix = None
+    if adapter:
+        a = str(adapter).strip()
+        if a:
+            adapter_prefix = f"/org/bluez/{a}/"
+
+    try:
+        props = getattr(mgr, "_properties", {}) or {}
+    except Exception:
+        return None
+
+    for path, ifaces in props.items():
+        try:
+            dev1 = (ifaces or {}).get("org.bluez.Device1") or {}
+            addr = str(dev1.get("Address") or "").strip().upper()
+            if addr != want_addr:
+                continue
+            if adapter_prefix and not str(path).startswith(adapter_prefix):
+                continue
+            name = dev1.get("Name") or dev1.get("Alias") or None
+            return BLEDevice(address=want_addr, name=name, details={"path": path, "props": dev1})
+        except Exception:
+            continue
+
+    return None
+
+
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--address", required=True)
     ap.add_argument("--timeout", type=float, default=20.0)
     ap.add_argument("--adapter", default=None, help="BlueZ adapter name, e.g. hci1")
+    ap.add_argument(
+        "--scan-timeout",
+        type=float,
+        default=0.0,
+        help="Optional scan time on connect failures (helps when BlueZ cache is empty)",
+    )
+    ap.add_argument("--debug", action="store_true", help="Include traceback in JSON on error")
     args = ap.parse_args()
 
     dec = JKDecoder()
+    out = {
+        "address": args.address,
+        "adapter": args.adapter,
+        "connected": False,
+        "model_nbr": None,
+        "got": {"device_info": False, "cell_info": False, "settings": False},
+        "status": {},
+        "error": None,
+    }
 
-    async with BleakClient(args.address, timeout=args.timeout, adapter=args.adapter) as client:
-        model_nbr = None
+    try:
+        # Connect (optionally scan+retry on DeviceNotFound). Some JK BLE devices stop advertising when busy/connected.
+        async def run_once(client: BleakClient):
+            try:
+                async with client:
+                    try:
+                        out["model_nbr"] = (
+                            (await client.read_gatt_char(MODEL_NBR_UUID))
+                            .decode("utf-8", errors="ignore")
+                            .strip()
+                        )
+                    except Exception:
+                        out["model_nbr"] = None
+
+                    got = out["got"]
+
+                    def ncb(sender: int, data: bytearray):
+                        kind = dec.assemble_and_maybe_decode(bytearray(data))
+                        if kind in got:
+                            got[kind] = True
+
+                    # notify setup
+                    #
+                    # On BlueZ it's possible to hit transient errors like:
+                    # - org.bluez.Error.NotPermitted: Notify acquired
+                    # - org.bluez.Error.InProgress / Operation already in progress
+                    #
+                    # Retrying the UUID is more reliable than falling back to a numeric handle.
+                    write_target = None
+                    last_err = None
+                    for _ in range(3):
+                        try:
+                            await client.start_notify(CHAR_UUID, ncb)
+                            write_target = CHAR_UUID
+                            last_err = None
+                            break
+                        except Exception as e1:
+                            last_err = e1
+                            await asyncio.sleep(0.6)
+                    if write_target is None:
+                        out["error"] = {"type": last_err.__class__.__name__, "message": str(last_err)}
+                        out["connected"] = bool(client.is_connected)
+                        out["status"] = dec.bms_status
+                        print(json.dumps(out, ensure_ascii=False))
+                        return 0
+
+                    async def send_device():
+                        await client.write_gatt_char(
+                            write_target, build_request_frame(COMMAND_DEVICE_INFO), response=False
+                        )
+
+                    async def send_cell():
+                        await client.write_gatt_char(
+                            write_target, build_request_frame(COMMAND_CELL_INFO), response=False
+                        )
+
+                    # initial burst
+                    await send_device()
+                    await asyncio.sleep(0.2)
+                    await send_cell()
+
+                    # Some JK firmwares are flaky with one-off requests; retry until timeout.
+                    t_end = time.time() + args.timeout
+                    t_next_dev = time.time() + 2.0
+                    t_next_cell = time.time() + 2.0
+                    while time.time() < t_end and not (got["device_info"] and got["cell_info"]):
+                        now = time.time()
+                        if not got["device_info"] and now >= t_next_dev:
+                            await send_device()
+                            t_next_dev = now + 2.0
+                        if not got["cell_info"] and now >= t_next_cell:
+                            await send_cell()
+                            t_next_cell = now + 2.0
+                        await asyncio.sleep(0.05)
+
+                    try:
+                        await client.stop_notify(write_target)
+                    except Exception:
+                        pass
+
+                    # Derivations for consumers (Node-RED/UI):
+                    try:
+                        ci = dec.bms_status.get("cell_info", {})
+                        v = ci.get("voltages") or []
+                        r = ci.get("resistances") or []
+                        inferred = 0
+                        for x in v:
+                            if x and x > 0:
+                                inferred += 1
+                        if inferred:
+                            ci["cell_count_inferred"] = inferred
+                            ci["voltages"] = v[:inferred]
+                            if r:
+                                ci["resistances"] = r[:inferred]
+                    except Exception:
+                        pass
+
+                    out["connected"] = bool(client.is_connected)
+                    out["status"] = dec.bms_status
+                    print(json.dumps(out, ensure_ascii=False))
+                    return 0
+            except Exception:
+                raise
+
         try:
-            model_nbr = (await client.read_gatt_char(MODEL_NBR_UUID)).decode("utf-8", errors="ignore").strip()
-        except Exception:
-            model_nbr = None
-
-        got = {"device_info": False, "cell_info": False, "settings": False}
-
-        def ncb(sender: int, data: bytearray):
-            kind = dec.assemble_and_maybe_decode(bytearray(data))
-            if kind in got:
-                got[kind] = True
-
-        # notify setup (UUID -> handle failover)
-        try:
-            await client.start_notify(CHAR_UUID, ncb)
-            write_target = CHAR_UUID
-        except exc.BleakError:
-            await client.start_notify(CHAR_HANDLE_FAILOVER, ncb)
-            write_target = CHAR_HANDLE_FAILOVER
-
-        async def send_device():
-            await client.write_gatt_char(write_target, build_request_frame(COMMAND_DEVICE_INFO), response=False)
-
-        async def send_cell():
-            await client.write_gatt_char(write_target, build_request_frame(COMMAND_CELL_INFO), response=False)
-
-        # initial burst
-        await send_device()
-        await asyncio.sleep(0.2)
-        await send_cell()
-
-        # Some JK firmwares are flaky with one-off requests; retry until timeout.
-        t_end = time.time() + args.timeout
-        t_next_dev = time.time() + 2.0
-        t_next_cell = time.time() + 2.0
-        while time.time() < t_end and not (got["device_info"] and got["cell_info"]):
-            now = time.time()
-            if not got["device_info"] and now >= t_next_dev:
-                await send_device()
-                t_next_dev = now + 2.0
-            if not got["cell_info"] and now >= t_next_cell:
-                await send_cell()
-                t_next_cell = now + 2.0
-            await asyncio.sleep(0.05)
-
-        try:
-            await client.stop_notify(write_target)
-        except Exception:
-            pass
-
-        # Derivations for consumers (Node-RED/UI):
-        try:
-            ci = dec.bms_status.get("cell_info", {})
-            v = ci.get("voltages") or []
-            r = ci.get("resistances") or []
-            # infer cell_count if settings missing
-            inferred = 0
-            for x in v:
-                if x and x > 0:
-                    inferred += 1
-            if inferred:
-                ci["cell_count_inferred"] = inferred
-                ci["voltages"] = v[:inferred]
-                if r:
-                    ci["resistances"] = r[:inferred]
-        except Exception:
-            pass
-
-        out = {
-            "address": args.address,
-            "adapter": args.adapter,
-            "connected": client.is_connected,
-            "model_nbr": model_nbr,
-            "got": got,
-            "status": dec.bms_status,
-        }
+            cached = await _ble_device_from_bluez_cache(args.address, args.adapter)
+            if cached is not None:
+                return await run_once(BleakClient(cached, timeout=args.timeout, adapter=args.adapter))
+            return await run_once(BleakClient(args.address, timeout=args.timeout, adapter=args.adapter))
+        except exc.BleakDeviceNotFoundError as e_nf:
+            scan_t = max(0.0, min(float(args.scan_timeout), float(args.timeout)))
+            if scan_t > 0:
+                try:
+                    try:
+                        dev = await BleakScanner.find_device_by_address(
+                            args.address, timeout=scan_t, adapter=args.adapter
+                        )
+                    except TypeError:
+                        dev = await BleakScanner.find_device_by_address(args.address, timeout=scan_t)
+                except Exception:
+                    dev = None
+                if dev is None:
+                    out["error"] = {"type": e_nf.__class__.__name__, "message": str(e_nf)}
+                    print(json.dumps(out, ensure_ascii=False))
+                    return 0
+            # Scan may not find a device that is connected/not advertising. Try cache lookup again.
+            cached = await _ble_device_from_bluez_cache(args.address, args.adapter)
+            if cached is not None:
+                return await run_once(BleakClient(cached, timeout=args.timeout, adapter=args.adapter))
+            return await run_once(BleakClient(args.address, timeout=args.timeout, adapter=args.adapter))
+    except Exception as e:
+        out["error"] = {"type": e.__class__.__name__, "message": str(e)}
+        if args.debug:
+            out["traceback"] = traceback.format_exc()
         print(json.dumps(out, ensure_ascii=False))
+        return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(asyncio.run(main()))

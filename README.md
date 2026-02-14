@@ -8,6 +8,7 @@ Node-RED Erweiterung fuer Deye/Pylontech-kompatible BMS-Kommunikation ueber RS48
 - `Profil -> BMS schreiben (CID2=49)` fuer Kern-Limits
 - Expert-Frame-Builder
 - Decoder-Erweiterungen fuer Set-ACK auf Services `49`, `45`, `8B`
+- JK-BMS BLE -> MQTT Gateway (stabile Daten fuer Node-RED + andere Systeme)
 - Dokumentation fuer Betrieb, Sicherheit und Troubleshooting
 
 ## Schnellstart
@@ -24,6 +25,7 @@ Node-RED Erweiterung fuer Deye/Pylontech-kompatible BMS-Kommunikation ueber RS48
 ## Dateistruktur
 - `docs/INDEX.md` Inhaltsverzeichnis (Start hier)
 - `docs/DASHBOARD_SERVICE.md` Bedienung Service-Seite
+- `docs/MQTT_GATEWAY_JK_BLE.md` JK BLE via MQTT (Topics + Service + Schema)
 - `docs/PROTOCOL_RS485_1363.md` Reverse-Engineering / Service-Mapping (Frameformat, CRC, Layouts, Snippets)
 - `docs/DEPLOY_NODE_RED.md` Backup, Restore, Restart
 - `node-red/flows.rs485-service.snapshot.json` Flow-Snapshot

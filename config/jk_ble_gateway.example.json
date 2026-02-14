@@ -1,0 +1,21 @@
+{
+  "mqtt": {
+    "host": "127.0.0.1",
+    "port": 1883,
+    "username": null,
+    "password": null,
+    "client_id": "jk-ble-gateway-rpi5",
+    "base_topic": "bms"
+  },
+  "poll_interval_s": 10,
+  "scan_timeout_s": 0,
+  "timeout_s": 20,
+  "devices": [
+    {
+      "name": "jk1",
+      "address": "C8:47:80:37:02:E8",
+      "adapter": "hci1"
+    }
+  ]
+}
+

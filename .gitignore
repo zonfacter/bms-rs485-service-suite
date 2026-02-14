@@ -2,3 +2,11 @@
 *.tmp
 *.swp
 .DS_Store
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Local config (contains hostnames/adapters)
+config/jk_ble_gateway.json

@@ -1,0 +1,18 @@
+[Unit]
+Description=JK-BMS BLE MQTT Gateway
+After=network-online.target bluetooth.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=black
+Group=black
+WorkingDirectory=/home/black/bms-rs485-service-suite
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/black/bms-rs485-service-suite/.venv/bin/python -u /home/black/bms-rs485-service-suite/tools/jk_ble_mqtt_gateway.py --config /home/black/bms-rs485-service-suite/config/jk_ble_gateway.json
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
