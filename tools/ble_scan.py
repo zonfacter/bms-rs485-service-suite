@@ -7,6 +7,7 @@ from bleak import BleakScanner
 async def main():
     ap = argparse.ArgumentParser(description="BLE scan (prints name, address, rssi)")
     ap.add_argument("--timeout", type=float, default=20.0)
+    ap.add_argument("--adapter", type=str, default="", help="BlueZ adapter (e.g. hci0, hci1)")
     ap.add_argument("--verbose", action="store_true", help="print extra advertisement metadata")
     args = ap.parse_args()
 
@@ -45,7 +46,12 @@ async def main():
         if svc_data and not cur["svc_data"]:
             cur["svc_data"] = svc_data
 
-    scanner = BleakScanner(detection_callback=cb)
+    # Bleak's adapter kwarg exists on most Linux/BlueZ builds, but keep a fallback
+    # to stay compatible with older versions.
+    try:
+        scanner = BleakScanner(detection_callback=cb, adapter=(args.adapter or None))
+    except TypeError:
+        scanner = BleakScanner(detection_callback=cb)
     await scanner.start()
     await asyncio.sleep(args.timeout)
     await scanner.stop()
