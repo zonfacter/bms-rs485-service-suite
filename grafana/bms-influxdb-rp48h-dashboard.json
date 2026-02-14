@@ -586,13 +586,14 @@
       },
       "targets": [
         {
-          "query": "SELECT mean(\"voltage\") FROM \"rp48h\".\"rs485_status\" WHERE $timeFilter AND \"addr\" =~ /^$addr$/ GROUP BY time($__interval) fill(null)",
+          "query": "SELECT mean(\"voltage\") FROM \"rp48h\".\"rs485_status\" WHERE $timeFilter GROUP BY time($__interval), \"addr\" fill(null)",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series"
+          "resultFormat": "time_series",
+          "alias": "{{addr}}"
         }
       ],
-      "title": "RS485 Voltage (V) [addr=$addr]",
+      "title": "RS485 Voltage (V)",
       "type": "timeseries"
     },
     {
@@ -673,13 +674,14 @@
       },
       "targets": [
         {
-          "query": "SELECT mean(\"current\") FROM \"rp48h\".\"rs485_status\" WHERE $timeFilter AND \"addr\" =~ /^$addr$/ GROUP BY time($__interval) fill(null)",
+          "query": "SELECT mean(\"current\") FROM \"rp48h\".\"rs485_status\" WHERE $timeFilter GROUP BY time($__interval), \"addr\" fill(null)",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series"
+          "resultFormat": "time_series",
+          "alias": "{{addr}}"
         }
       ],
-      "title": "RS485 Current (A) [addr=$addr]",
+      "title": "RS485 Current (A)",
       "type": "timeseries"
     },
     {
@@ -760,13 +762,14 @@
       },
       "targets": [
         {
-          "query": "SELECT mean(\"cell_delta_v\") FROM \"rp48h\".\"rs485_status\" WHERE $timeFilter AND \"addr\" =~ /^$addr$/ GROUP BY time($__interval) fill(null)",
+          "query": "SELECT mean(\"cell_delta_v\") FROM \"rp48h\".\"rs485_status\" WHERE $timeFilter GROUP BY time($__interval), \"addr\" fill(null)",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series"
+          "resultFormat": "time_series",
+          "alias": "{{addr}}"
         }
       ],
-      "title": "RS485 Cell Delta (V) [addr=$addr]",
+      "title": "RS485 Cell Delta (V)",
       "type": "timeseries"
     },
     {
@@ -847,13 +850,14 @@
       },
       "targets": [
         {
-          "query": "SELECT mean(\"temp_avg\") FROM \"rp48h\".\"rs485_status\" WHERE $timeFilter AND \"addr\" =~ /^$addr$/ GROUP BY time($__interval) fill(null)",
+          "query": "SELECT mean(\"temp_avg\") FROM \"rp48h\".\"rs485_status\" WHERE $timeFilter GROUP BY time($__interval), \"addr\" fill(null)",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series"
+          "resultFormat": "time_series",
+          "alias": "{{addr}}"
         }
       ],
-      "title": "RS485 Temp Avg (C) [addr=$addr]",
+      "title": "RS485 Temp Avg (C)",
       "type": "timeseries"
     },
     {
@@ -1350,9 +1354,9 @@
         },
         "definition": "SHOW TAG VALUES FROM \"rp48h\".\"rs485_status\" WITH KEY = \"addr\"",
         "hide": 0,
-        "includeAll": false,
+        "includeAll": true,
         "label": "RS485 Addr",
-        "multi": false,
+        "multi": true,
         "name": "addr",
         "options": [],
         "query": "SHOW TAG VALUES FROM \"rp48h\".\"rs485_status\" WITH KEY = \"addr\"",
@@ -1360,7 +1364,8 @@
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
-        "type": "query"
+        "type": "query",
+        "allValue": ".*"
       },
       {
         "current": {
