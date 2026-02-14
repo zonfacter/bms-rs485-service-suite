@@ -11,6 +11,11 @@ Optional on-demand read trigger:
   Subscribe: {base_topic}/daly/<name>/cmd/read  (any payload triggers immediate read)
 
 This gateway serializes BLE reads (per device) to avoid BlueZ concurrency issues.
+
+Optional runtime config:
+  Publish JSON to: {base_topic}/daly/<name>/cmd/config
+    {"address":"..","adapter":"hci0","poll_interval_s":10,"timeout_s":20,"scan_timeout_s":10}
+  The gateway applies changes in-memory and persists back to the config file.
 """
 
 from __future__ import annotations
@@ -93,9 +98,10 @@ class DeviceCfg:
 
 
 class Gateway:
-    def __init__(self, cfg: Dict[str, Any], python: str) -> None:
+    def __init__(self, cfg: Dict[str, Any], python: str, config_path: str) -> None:
         self.cfg = cfg
         self.python = python
+        self.config_path = config_path
 
         m = cfg.get("mqtt") or {}
         self.mqtt_host = m.get("host", "127.0.0.1")
@@ -119,7 +125,7 @@ class Gateway:
                 )
             )
 
-        self._cmdq: "queue.Queue[tuple[str, str]]" = queue.Queue()
+        self._cmdq: "queue.Queue[tuple[str, str, Optional[Dict[str, Any]]]]" = queue.Queue()
         self._stop = threading.Event()
 
         self._client = mqtt.Client(client_id=self.client_id, clean_session=True)
@@ -142,6 +148,7 @@ class Gateway:
     def _on_connect(self, client: mqtt.Client, userdata: Any, flags: Dict[str, Any], rc: int) -> None:
         for dev in self.devices:
             client.subscribe(self._t(dev, "cmd/read"), qos=0)
+            client.subscribe(self._t(dev, "cmd/config"), qos=0)
         for dev in self.devices:
             self._publish_json(
                 self._t(dev, "meta"),
@@ -156,9 +163,33 @@ class Gateway:
             return
         name = parts[-3]
         cmd = parts[-2] + "/" + parts[-1]
-        if cmd != "cmd/read":
+        if cmd == "cmd/read":
+            self._cmdq.put((name, "read", None))
             return
-        self._cmdq.put((name, "read"))
+        if cmd == "cmd/config":
+            try:
+                raw = msg.payload.decode("utf-8") if isinstance(msg.payload, (bytes, bytearray)) else str(msg.payload)
+                cfg = json.loads(raw) if raw.strip() else {}
+                if isinstance(cfg, dict):
+                    self._cmdq.put((name, "config", cfg))
+            except Exception:
+                return
+
+    def _save_cfg(self) -> None:
+        try:
+            cfg = dict(self.cfg)
+            cfg["poll_interval_s"] = self.poll_interval_s
+            cfg["timeout_s"] = self.timeout_s
+            cfg["scan_timeout_s"] = self.scan_timeout_s
+            cfg["devices"] = [{"name": d.name, "address": d.address, "adapter": d.adapter} for d in self.devices]
+            tmp = self.config_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+            os.replace(tmp, self.config_path)
+            self.cfg = cfg
+        except Exception:
+            return
 
     def connect(self) -> None:
         self._client.connect(self.mqtt_host, self.mqtt_port, keepalive=30)
@@ -186,9 +217,50 @@ class Gateway:
                 now = _now()
                 try:
                     while True:
-                        name, action = self._cmdq.get_nowait()
+                        name, action, payload = self._cmdq.get_nowait()
                         if action == "read":
                             next_poll[name] = 0.0
+                        elif action == "config" and isinstance(payload, dict):
+                            for dev in self.devices:
+                                if dev.name != name:
+                                    continue
+                                if payload.get("address"):
+                                    dev.address = str(payload["address"]).strip()
+                                if "adapter" in payload:
+                                    a = payload["adapter"]
+                                    a = None if a is None or str(a).strip() == "" else str(a).strip()
+                                    if a is None or (a.startswith("hci") and a[3:].isdigit()):
+                                        dev.adapter = a
+                                self._publish_json(
+                                    self._t(dev, "meta"),
+                                    {"name": dev.name, "address": dev.address, "adapter": dev.adapter, "ts": _now()},
+                                    retain=True,
+                                )
+                                next_poll[name] = 0.0
+
+                            if "poll_interval_s" in payload:
+                                try:
+                                    v = float(payload["poll_interval_s"])
+                                    if v >= 1:
+                                        self.poll_interval_s = v
+                                except Exception:
+                                    pass
+                            if "timeout_s" in payload:
+                                try:
+                                    v = float(payload["timeout_s"])
+                                    if v >= 5:
+                                        self.timeout_s = v
+                                except Exception:
+                                    pass
+                            if "scan_timeout_s" in payload:
+                                try:
+                                    v = float(payload["scan_timeout_s"])
+                                    if v >= 0:
+                                        self.scan_timeout_s = v
+                                except Exception:
+                                    pass
+
+                            self._save_cfg()
                 except queue.Empty:
                     pass
 
@@ -229,10 +301,9 @@ def main() -> int:
     args = ap.parse_args()
 
     cfg = _load_json(args.config)
-    gw = Gateway(cfg, python=args.python)
+    gw = Gateway(cfg, python=args.python, config_path=args.config)
     return gw.run()
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

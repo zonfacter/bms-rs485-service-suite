@@ -16,11 +16,24 @@ Pro Device `name=<akku2>`:
 - `bms/daly/<name>/online` (`true`/`false`, retained)
 - `bms/daly/<name>/meta` (retained)
 - Trigger: `bms/daly/<name>/cmd/read`
+- Runtime-Config: `bms/daly/<name>/cmd/config` (JSON)
 
 Trigger Beispiel:
 ```bash
 mosquitto_pub -h 127.0.0.1 -t 'bms/daly/akku2/cmd/read' -n
 ```
+
+Runtime-Config Beispiel (Adapter wechseln, Pollrate setzen):
+```bash
+mosquitto_pub -h 127.0.0.1 -t 'bms/daly/akku2/cmd/config' -m '{\"adapter\":\"hci0\",\"poll_interval_s\":10}'
+```
+
+Unterstuetzte Felder (alle optional):
+- `address` (MAC)
+- `adapter` (`hci0`, `hci1`, oder `null`/leer)
+- `poll_interval_s`
+- `timeout_s`
+- `scan_timeout_s`
 
 ## Config
 
@@ -54,4 +67,3 @@ Wenn `Operation already in progress` / `br-connection-canceled`:
 - nur EIN Prozess soll gleichzeitig auf das Device zugreifen
 - ggf. `sudo systemctl restart bluetooth`
 - ggf. `sudo systemctl restart daly-ble-mqtt-gateway`
-

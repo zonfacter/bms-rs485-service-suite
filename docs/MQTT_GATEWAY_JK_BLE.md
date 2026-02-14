@@ -62,11 +62,24 @@ Device `name=jk1`:
 - `bms/jk/jk1/online` (`true`/`false`, retained)
 - `bms/jk/jk1/meta` (retained JSON, z.B. Name/Adresse/Adapter)
 - `bms/jk/jk1/cmd/read` (Publish irgendwas, triggert sofortiges Read)
+- `bms/jk/jk1/cmd/config` (JSON, Runtime-Konfiguration)
 
 Trigger:
 ```bash
 mosquitto_pub -h 127.0.0.1 -t 'bms/jk/jk1/cmd/read' -n
 ```
+
+Runtime-Config (Adapter/Pollrate/Timeouts):
+```bash
+mosquitto_pub -h 127.0.0.1 -t 'bms/jk/jk1/cmd/config' -m '{\"adapter\":\"hci0\",\"poll_interval_s\":10}'
+```
+
+Unterstuetzte Felder (alle optional):
+- `address` (MAC)
+- `adapter` (`hci0`, `hci1`, oder `null`/leer)
+- `poll_interval_s`
+- `timeout_s`
+- `scan_timeout_s`
 
 ## Payload Schema (raw)
 
