@@ -9,6 +9,8 @@ Node-RED Erweiterung fuer Deye/Pylontech-kompatible BMS-Kommunikation ueber RS48
 - Expert-Frame-Builder
 - Decoder-Erweiterungen fuer Set-ACK auf Services `49`, `45`, `8B`
 - JK-BMS BLE -> MQTT Gateway (stabile Daten fuer Node-RED + andere Systeme)
+- DALY SmartBMS / DALY Balancer BLE -> MQTT Gateway (Akku-1/2/3)
+- InfluxDB Export (Retention `rp48h`) fuer JK BLE, DALY BLE und RS485 + fertiges Grafana Dashboard JSON
 - Dokumentation fuer Betrieb, Sicherheit und Troubleshooting
 
 ## Schnellstart
@@ -26,7 +28,10 @@ Node-RED Erweiterung fuer Deye/Pylontech-kompatible BMS-Kommunikation ueber RS48
 - `docs/INDEX.md` Inhaltsverzeichnis (Start hier)
 - `docs/DASHBOARD_SERVICE.md` Bedienung Service-Seite
 - `docs/MQTT_GATEWAY_JK_BLE.md` JK BLE via MQTT (Topics + Service + Schema)
+- `docs/MQTT_GATEWAY_DALY_BLE.md` DALY BLE via MQTT (Topics + Service + Schema)
 - `docs/PROTOCOL_RS485_1363.md` Reverse-Engineering / Service-Mapping (Frameformat, CRC, Layouts, Snippets)
 - `docs/DEPLOY_NODE_RED.md` Backup, Restore, Restart
+- `docs/INFLUXDB_GRAFANA.md` InfluxDB + Grafana (Schema + Queries)
+- `docs/GRAFANA_IMPORT.md` Dashboard Import
 - `node-red/flows.rs485-service.snapshot.json` Flow-Snapshot
 - `scripts/backup-flows.sh` Backup-Helper

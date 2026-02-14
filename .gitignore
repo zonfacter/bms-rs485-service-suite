@@ -10,3 +10,4 @@ __pycache__/
 
 # Local config (contains hostnames/adapters)
 config/jk_ble_gateway.json
+config/daly_ble_gateway.json

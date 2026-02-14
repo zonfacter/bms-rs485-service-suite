@@ -1,4 +1,4 @@
-# InfluxDB + Grafana (JK BLE und RS485 Daten)
+# InfluxDB + Grafana (JK BLE, DALY BLE und RS485 Daten)
 
 Dieses Projekt schreibt JK-BMS BLE Daten aus Node-RED in eine lokale InfluxDB, damit Grafana sie anzeigen kann.
 
@@ -46,6 +46,24 @@ Quick Check:
 ```bash
 influx -database bms -execute 'SHOW MEASUREMENTS'
 influx -database bms -execute 'SELECT voltage,current,soc,temp1,delta_v FROM rp48h.jk_ble ORDER BY time DESC LIMIT 10'
+```
+
+## DALY BLE -> InfluxDB
+
+DALY SmartBMS / DALY Balancer BLE Daten werden aus dem MQTT Gateway in Node-RED nach InfluxDB geschrieben:
+
+- Measurement: `daly_ble`
+  - Tags: `device` (z.B. `akku2`), `mac`, `src=daly_ble`
+  - Fields: `voltage,current,temp,soc,cell_min_v,cell_max_v,cell_delta_v`
+
+- Measurement: `daly_ble_cells`
+  - Tags: `device`, `mac`, `src=daly_ble`
+  - Fields: `cell01..cell16` (Volt)
+
+Quick Check:
+```bash
+influx -database bms -execute 'SELECT voltage,current,temp,cell_delta_v FROM rp48h.daly_ble ORDER BY time DESC LIMIT 10'
+influx -database bms -execute 'SELECT cell01,cell02,cell16 FROM rp48h.daly_ble_cells ORDER BY time DESC LIMIT 3'
 ```
 
 ## RS485 -> InfluxDB

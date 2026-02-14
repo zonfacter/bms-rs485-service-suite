@@ -2,6 +2,7 @@
 
 Dieses Repo enthaelt ein fertiges Grafana Dashboard fuer:
 - JK BLE (`rp48h.jk_ble`)
+- DALY BLE (`rp48h.daly_ble`, `rp48h.daly_ble_cells`)
 - RS485 (`rp48h.rs485_status`, `rp48h.rs485_limits`)
 
 Datei:
@@ -39,9 +40,13 @@ RS485 Voltage (per addr Variable):
 SELECT mean("voltage") FROM "rp48h"."rs485_status" WHERE $timeFilter AND "addr" =~ /^$addr$/ GROUP BY time($__interval) fill(null)
 ```
 
+DALY Voltage (per daly_device Variable):
+```sql
+SELECT mean("voltage") FROM "rp48h"."daly_ble" WHERE $timeFilter AND "device" =~ /^$daly_device$/ GROUP BY time($__interval) fill(null)
+```
+
 ## Hinweise
 - Das Dashboard nutzt `rp48h.<measurement>`. Wenn du spaeter eine andere Retention Policy nutzt, passe die Queries an.
 - Wenn keine RS485 Daten kommen, pruefe zuerst in Influx:
   - `SHOW MEASUREMENTS`
   - `SELECT * FROM rp48h.rs485_status ORDER BY time DESC LIMIT 5`
-

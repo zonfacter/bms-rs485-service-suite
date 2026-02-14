@@ -1,0 +1,26 @@
+{
+  "mqtt": {
+    "host": "127.0.0.1",
+    "port": 1883,
+    "username": null,
+    "password": null,
+    "client_id": "daly-ble-gateway-rpi5",
+    "base_topic": "bms"
+  },
+  "poll_interval_s": 15,
+  "scan_timeout_s": 15,
+  "timeout_s": 15,
+  "devices": [
+    {
+      "name": "akku2",
+      "address": "40:17:10:01:06:C7",
+      "adapter": "hci1"
+    },
+    {
+      "name": "akku3",
+      "address": "40:17:10:01:03:C2",
+      "adapter": "hci1"
+    }
+  ]
+}
+
