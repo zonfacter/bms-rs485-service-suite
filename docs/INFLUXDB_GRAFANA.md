@@ -84,6 +84,30 @@ influx -database bms -execute 'SELECT voltage,current,power FROM rp48h.rs485_sta
 influx -database bms -execute 'SELECT cell_v_hi,pack_v_hi,chg_i_lim FROM rp48h.rs485_limits ORDER BY time DESC LIMIT 10'
 ```
 
+## SolarAssistant (optional) -> InfluxDB
+
+Wenn SolarAssistant seine MQTT Topics in deinen Broker publiziert (z.B. Mosquitto auf dem Pi), kann Node-RED diese abonnieren und als Snapshot nach Influx schreiben.
+
+Subscribed Topic (Wildcard):
+- `solar_assistant/total/+/state`
+
+Measurement: `solarassistant_total`
+- Tags:
+  - `source=solarassistant`
+  - `scope=total`
+- Fields:
+  - `pv_power_w` (W)
+  - `load_power_w` (W)
+  - `grid_power_w` (W; negativ/positiv je nach SolarAssistant-Konvention)
+  - `battery_power_w` (W)
+  - `battery_soc_pct` (%)
+  - `battery_temp_c` (°C)
+
+Quick Check:
+```bash
+influx -database bms -execute 'SELECT * FROM rp48h.solarassistant_total ORDER BY time DESC LIMIT 5'
+```
+
 ## Grafana
 
 In Grafana (InfluxQL / InfluxDB 1.x Datasource):

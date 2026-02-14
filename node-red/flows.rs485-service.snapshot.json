@@ -16660,5 +16660,66 @@
         "fn-scheduler"
       ]
     ]
+  },
+  {
+    "id": "tab_solarassistant_mqtt",
+    "type": "tab",
+    "label": "SolarAssistant (MQTT->Influx)",
+    "disabled": false,
+    "info": "Subscribes to SolarAssistant MQTT topics (solar_assistant/total/*/state) and writes to InfluxDB (rp48h)."
+  },
+  {
+    "id": "mqtt_in_solarassistant_total",
+    "type": "mqtt in",
+    "z": "tab_solarassistant_mqtt",
+    "name": "SA total wildcard",
+    "topic": "solar_assistant/total/+/state",
+    "qos": "1",
+    "datatype": "auto",
+    "broker": "2444f8dc7ec4c282",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 180,
+    "y": 120,
+    "wires": [
+      [
+        "fn_sa_total_to_influx"
+      ]
+    ]
+  },
+  {
+    "id": "fn_sa_total_to_influx",
+    "type": "function",
+    "z": "tab_solarassistant_mqtt",
+    "name": "SA total -> Influx (snapshot)",
+    "func": "// solar_assistant/total/<key>/state -> Influx snapshot\n// Keys expected:\n// - battery_power\n// - battery_state_of_charge\n// - battery_temperature\n// - grid_power\n// - load_power\n// - pv_power\n\nvar t = String(msg.topic||'');\nvar m = t.match(/^solar_assistant\\/total\\/([^\\/]+)\\/state$/);\nif(!m) return null;\nvar k = m[1];\n\nfunction num(x){\n  if (x==null) return null;\n  if (typeof x === 'object' && x.value != null) x = x.value;\n  var v = Number(x);\n  return Number.isFinite(v) ? v : null;\n}\n\nvar v = num(msg.payload);\nif (v == null) return null;\n\nvar keyMap = {\n  battery_power: 'battery_power_w',\n  battery_state_of_charge: 'battery_soc_pct',\n  battery_temperature: 'battery_temp_c',\n  grid_power: 'grid_power_w',\n  load_power: 'load_power_w',\n  pv_power: 'pv_power_w'\n};\nvar fkey = keyMap[k];\nif(!fkey) return null;\n\nvar st = flow.get('SA_TOTAL') || {};\nst[fkey] = v;\nst._ts_ms = Date.now();\nflow.set('SA_TOTAL', st);\n\nfunction roundN(x,n){ var f=Math.pow(10,n||3); return Math.round(Number(x)*f)/f; }\n\nvar fields = {};\n['battery_power_w','battery_soc_pct','battery_temp_c','grid_power_w','load_power_w','pv_power_w'].forEach(function(fn){\n  if (st[fn] == null) return;\n  var vv = Number(st[fn]);\n  if (!Number.isFinite(vv)) return;\n  fields[fn] = roundN(vv, 3);\n});\n\nif(Object.keys(fields).length===0) return null;\n\nmsg.measurement = 'solarassistant_total';\nmsg.retentionPolicy = 'rp48h';\nmsg.payload = [fields, {source: 'solarassistant', scope: 'total'}];\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 120,
+    "wires": [
+      [
+        "influx_out_solarassistant_total"
+      ]
+    ]
+  },
+  {
+    "id": "influx_out_solarassistant_total",
+    "type": "influxdb out",
+    "z": "tab_solarassistant_mqtt",
+    "influxdb": "63d07bbe2ea52",
+    "name": "Influx write solarassistant_total",
+    "measurement": "solarassistant_total",
+    "precision": "",
+    "retentionPolicy": "",
+    "database": "",
+    "x": 740,
+    "y": 120,
+    "wires": []
   }
 ]
