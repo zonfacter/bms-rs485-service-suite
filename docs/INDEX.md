@@ -10,6 +10,7 @@ Diese Seite ist das Inhaltsverzeichnis fuer das Repo. Sie ist absichtlich:
 - Dashboard Bedienung (Node-RED UI): [`DASHBOARD_SERVICE.md`](DASHBOARD_SERVICE.md)
 - Backup/Restore/Restart (Betrieb): [`DEPLOY_NODE_RED.md`](DEPLOY_NODE_RED.md)
 - JK-BMS BLE via MQTT (Gateway + Topics + Schema): [`MQTT_GATEWAY_JK_BLE.md`](MQTT_GATEWAY_JK_BLE.md)
+- InfluxDB + Grafana (Timeseries Export): [`INFLUXDB_GRAFANA.md`](INFLUXDB_GRAFANA.md)
 
 ## Was ist implementiert?
 - Frame Builder (ASCII, CID1=4A, CID2 variabel) inkl. LEN/LCS und 16-bit ASCII-Checksum
