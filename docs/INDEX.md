@@ -11,6 +11,7 @@ Diese Seite ist das Inhaltsverzeichnis fuer das Repo. Sie ist absichtlich:
 - Backup/Restore/Restart (Betrieb): [`DEPLOY_NODE_RED.md`](DEPLOY_NODE_RED.md)
 - JK-BMS BLE via MQTT (Gateway + Topics + Schema): [`MQTT_GATEWAY_JK_BLE.md`](MQTT_GATEWAY_JK_BLE.md)
 - InfluxDB + Grafana (Timeseries Export): [`INFLUXDB_GRAFANA.md`](INFLUXDB_GRAFANA.md)
+- Grafana Dashboard Import (fertiges JSON): [`GRAFANA_IMPORT.md`](GRAFANA_IMPORT.md)
 
 ## Was ist implementiert?
 - Frame Builder (ASCII, CID1=4A, CID2 variabel) inkl. LEN/LCS und 16-bit ASCII-Checksum
