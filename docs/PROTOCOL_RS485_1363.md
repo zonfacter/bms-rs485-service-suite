@@ -118,25 +118,40 @@ Response:
 Request INFO:
 - `INFO = <ADR>`
 
-Response Layout (alle Werte 2 Byte, aber im Frame als 4 Hexchars pro Wert):
-| Index | Feld | Typ | Skalierung/Decode |
+#### Verifiziertes Layout (Stand 2026-02-14)
+Wichtig: Die fruehere Annahme (Pack/Discharge Limits etc.) war falsch und hat im Dashboard zu offensichtlich unsinnigen Werten gefuehrt (z.B. `36.8 A` als "Chg/Dis", obwohl es in Wirklichkeit `3.680 V` Zell-OV war).
+
+Die folgenden Offsets wurden mit Live-Raw-Capture (Influx `rs485_raw47`) gegen echte Frames validiert.
+
+`DATAHEX` beginnt mit `dataflag` (1 Byte), danach folgen u16/i16 Felder (Big-Endian, also genau wie `rU16()` auf 4 Hexzeichen):
+
+| Byte-Offset (nach dataflag) | Feld | Typ | Skalierung |
 |---:|---|---|---|
-| 1 | `dataflag` | u8 | raw |
-| 2 | `cell_v_hi` | u16 | `/100` |
-| 3 | `cell_v_lo` | u16 | `/100` |
-| 4 | `cell_v_uv` | u16 | `/100` |
-| 5 | `chg_t_hi` | i16 | `guessTempToC()` |
-| 6 | `chg_t_lo` | i16 | `guessTempToC()` |
-| 7 | `chg_i_lim` | i16 | `/100` A |
-| 8 | `pack_v_hi` | u16 | `/100` |
-| 9 | `pack_v_lo` | u16 | `/100` |
-| 10 | `pack_v_uv` | u16 | `/100` |
-| 11 | `dch_t_hi` | i16 | `guessTempToC()` |
-| 12 | `dch_t_lo` | i16 | `guessTempToC()` |
-| 13 | `dch_i_lim` | i16 | `/100` A |
+| 0 | `dataflag` | u8 | raw |
+| 1..2 | `cell_v_hi` | u16 | mV -> `/1000` V |
+| 3..4 | `cell_v_lo` | u16 | mV -> `/1000` V |
+| 5..6 | `chg_t_hi` | i16 | deci-C -> `/10` °C |
+| 7..8 | `chg_t_lo` | i16 | deci-C -> `/10` °C |
+| 9..10 | `chg_i_upper` | u16 | centi-A -> `/100` A |
+| 11..12 | `cell_v_hi_2` | u16 | mV -> `/1000` V (repeat) |
+| 13..14 | `cell_v_lo_2` | u16 | mV -> `/1000` V (repeat) |
+| 15..16 | `cell_count` | u16 | raw (typ. 16) |
+| 17..18 | `chg_i_lim` | u16 | centi-A -> `/100` A |
+| 19..20 | `design_capacity_ah` | u16 | centi-Ah -> `/100` Ah |
+| 21..22 | `interval_min` | u16 | Minuten (z.B. 1440) |
+| 23..24 | `balance_mode` | u16 | raw |
+
+Danach folgt ein Tail aus `0xFF` Bloecken und oft einer ASCII-Kennung (z.B. Barcode/Serienkennung). Node-RED extrahiert daraus best-effort ein `ascii` Feld (laengster printable Run).
+
+Abgeleitet:
+- `pack_v_hi = cell_v_hi * cell_count`
+- `pack_v_lo = cell_v_lo * cell_count`
+
+Nicht in diesem Frame verifiziert (Stand jetzt):
+- Discharge-Temperatur-/Stromlimits (`dch_*`) scheinen hier nicht enthalten zu sein; UI/Influx speichert sie daher als `null`.
 
 Anmerkung:
-- In UI/Doku solltest du diese Werte ggf. normalisieren (z.B. /10 oder /1000) falls die Quelle anders skaliert. Node-RED macht im UI eine Normalisierungsschicht.
+- Wenn du neue Firmware/Modelle findest, die das Layout aendern: raw bytes in `rs485_raw47` mitschreiben und die Offsets neu gegenpruefen.
 
 ### Service 0x51 (Geraeteinfo / ASCII)
 Response:
