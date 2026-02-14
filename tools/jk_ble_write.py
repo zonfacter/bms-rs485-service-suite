@@ -207,9 +207,6 @@ async def main():
     if not ops:
         raise SystemExit("No operation specified")
 
-    if not args.force:
-        raise SystemExit("Refusing to write without --force (safety). Use --dry-run to inspect planned ops.")
-
     # Protocol selection (auto: default to jk02_24s unless user forces 32s)
     proto = args.proto.strip().lower()
     if proto == "auto":
@@ -222,6 +219,9 @@ async def main():
         planned["proto"] = proto
         print(json.dumps({"planned": planned}, ensure_ascii=False))
         return
+
+    if not args.force:
+        raise SystemExit("Refusing to write without --force (safety). Use --dry-run to inspect planned ops.")
 
     results = {"address": args.address, "adapter": args.adapter, "ts": time.time(), "ops": []}
 
