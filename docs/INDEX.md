@@ -12,6 +12,7 @@ Diese Seite ist das Inhaltsverzeichnis fuer das Repo. Sie ist absichtlich:
 - JK-BMS BLE via MQTT (Gateway + Topics + Schema): [`MQTT_GATEWAY_JK_BLE.md`](MQTT_GATEWAY_JK_BLE.md)
 - InfluxDB + Grafana (Timeseries Export): [`INFLUXDB_GRAFANA.md`](INFLUXDB_GRAFANA.md)
 - Grafana Dashboard Import (fertiges JSON): [`GRAFANA_IMPORT.md`](GRAFANA_IMPORT.md)
+- DALY Balancer BLE (Reverse Engineering Notes): [`BLE_BALANCER_DALY.md`](BLE_BALANCER_DALY.md)
 
 ## Was ist implementiert?
 - Frame Builder (ASCII, CID1=4A, CID2 variabel) inkl. LEN/LCS und 16-bit ASCII-Checksum
