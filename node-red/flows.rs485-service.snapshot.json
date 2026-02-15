@@ -10304,7 +10304,8 @@
         "db-status",
         "lout_status_01",
         "fn_rs485_status_to_influx",
-        "fn_rs485_scan_rec_33c2c3c8eacc4035"
+        "fn_rs485_scan_rec_33c2c3c8eacc4035",
+        "fn_soc_v16s_3553458c056e4549"
       ],
       [
         "db-alarms",
@@ -16910,5 +16911,50 @@
         "ui_txt_rs485_scan_status_e4a8a663351e4106"
       ]
     ]
+  },
+  {
+    "id": "fn_soc_v16s_3553458c056e4549",
+    "type": "function",
+    "z": "tab-rs485-poller",
+    "name": "SOC (calc) from RS485 voltage (LFP 16s)",
+    "func": "// Estimate SOC from pack voltage (LiFePO4 16s) using a simple OCV curve.\n// NOTE: LFP OCV is very flat; this is only a rough estimate.\n\nconst N_SERIES = 16;\nconst FRESH_MS = 30000;\n\nfunction interp(points, x) {\n  if (x <= points[0][0]) return points[0][1];\n  for (let i=0;i<points.length-1;i++) {\n    const x0=points[i][0], y0=points[i][1];\n    const x1=points[i+1][0], y1=points[i+1][1];\n    if (x >= x0 && x <= x1) {\n      const t = (x - x0) / (x1 - x0);\n      return y0 + t*(y1 - y0);\n    }\n  }\n  return points[points.length-1][1];\n}\n\n// Approx OCV (resting) curve points (cell volts -> SOC%).\nconst curve = [\n  [2.900,   0],\n  [3.200,  10],\n  [3.250,  20],\n  [3.280,  30],\n  [3.300,  40],\n  [3.320,  50],\n  [3.335,  60],\n  [3.350,  70],\n  [3.365,  80],\n  [3.380,  90],\n  [3.400,  95],\n  [3.450, 100]\n];\n\nconst v = Number(msg.payload && msg.payload.voltage);\nif (!isFinite(v) || v <= 0) return null;\n\n// Track latest per address and compute an average across fresh packs.\nconst adr = String((msg.payload && msg.payload.addr) || (msg.topic||'')).match(/([0-9A-Fa-f]{2})/)?.[1]?.toUpperCase() || '??';\nlet m = flow.get('SOC_V16S_V_BY_ADDR') || {};\nm[adr] = { v: v, ts: Date.now() };\nflow.set('SOC_V16S_V_BY_ADDR', m);\n\nconst now = Date.now();\nlet sum=0, n=0;\nfor (const k of Object.keys(m)) {\n  const it = m[k];\n  if (!it || !isFinite(it.v) || !it.ts) continue;\n  if ((now - it.ts) > FRESH_MS) continue;\n  sum += it.v;\n  n += 1;\n}\nif (n === 0) return null;\n\nconst vAvg = sum / n;\nconst vCell = vAvg / N_SERIES;\nlet soc = interp(curve, vCell);\nsoc = Math.max(0, Math.min(100, soc));\n\nmsg.payload = soc;\nmsg.voltage_avg = vAvg;\nmsg.v_cell_avg = vCell;\nmsg.packs_used = n;\nmsg.topic = 'soc_calc_v16s';\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 910,
+    "y": 520,
+    "wires": [
+      [
+        "ui_gauge_soc_calc_7ecae821f06f4dfe"
+      ]
+    ]
+  },
+  {
+    "id": "ui_gauge_soc_calc_7ecae821f06f4dfe",
+    "type": "ui_gauge",
+    "z": "tab-rs485-poller",
+    "name": "SOC (calc, 16s LFP)",
+    "group": "grp1_b4146321",
+    "order": 15,
+    "width": 6,
+    "height": 4,
+    "gtype": "gage",
+    "title": "SOC (calc, 16s LFP, aus Spannung)",
+    "label": "%",
+    "format": "{{value | number:1}}",
+    "min": 0,
+    "max": 100,
+    "colors": [
+      "#c0392b",
+      "#f39c12",
+      "#27ae60"
+    ],
+    "seg1": "20",
+    "seg2": "80",
+    "x": 1160,
+    "y": 520,
+    "wires": []
   }
 ]
