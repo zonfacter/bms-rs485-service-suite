@@ -88,6 +88,10 @@ influx -database bms -execute 'SELECT cell_v_hi,pack_v_hi,chg_i_lim FROM rp48h.r
 
 Wenn SolarAssistant seine MQTT Topics in deinen Broker publiziert (z.B. Mosquitto auf dem Pi), kann Node-RED diese abonnieren und als Snapshot nach Influx schreiben.
 
+Wichtig:
+- SolarAssistant hostet seine Web-UI unter z.B. `http://192.168.2.244/`, aber das ist **nicht** automatisch ein MQTT Broker.
+- Auf dem Raspberry muss der MQTT Broker auf dem LAN erreichbar sein (standardmaessig lauscht Mosquitto 2.x oft nur auf `127.0.0.1`). In diesem Setup wurde dafuer ein Listener auf `0.0.0.0:1883` konfiguriert.
+
 Subscribed Topic (Wildcard):
 - `solar_assistant/total/+/state`
 
