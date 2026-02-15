@@ -10250,7 +10250,7 @@
     "type": "function",
     "z": "tab-rs485-poller",
     "name": "Poll Scheduler (ADDRS & Services)",
-    "func": "// === CONFIG ===\nconst CFG = flow.get('RS485_POLL_CFG_DEYE') || {\n  PROTOCOL: 'PYLON_V3',\n  PORT: '/dev/ttyUSB0',\n  GROUP: 0,\n  ADDRS: [0x01,0x02,0x03,0x04],\n  INJECT_INTERVAL: \"60\",\n  CYCLE_42: 1,\n  CYCLE_44: 5,\n  CYCLE_47: 2,\n  CYCLE_51: 2,\n  CYCLE_83: 4,\n  CYCLE_B03: 6,\n  CYCLE_B04: 8\n};\n// Force address list (user wants 01..04 polled)\nCFG.ADDRS = [0x01,0x02,0x03,0x04];\nflow.set('RS485_POLL_CFG_DEYE', CFG);\n\nconst busy = flow.get('RS485_BUSY') || false;\nconst lastSentAt = flow.get('RS485_LAST_SENT') || 0;\nconst now = Date.now();\n// Strict single-inflight request gate: if we send a new request before the previous\n// response arrived, RS485_LAST_REQ gets overwritten and decoder can mis-classify frames\n// (then you see komische Werte in Status/Zellen).\nconst REQ_TIMEOUT_MS = 2000;\nif (busy) {\n  const age = now - lastSentAt;\n  if (age < REQ_TIMEOUT_MS) return null;\n  // timed out: unblock and continue\n  flow.set('RS485_BUSY', false);\n}\n\nconst topic = (msg.topic || '').toString();\nconst payloadCmd = (typeof msg.payload === 'string') ? msg.payload.toLowerCase() : '';\nconst fastMode = flow.get('RS485_DEBUG_FAST') === true;\n// Optional: force an address for force42 injects (payload can be '01', '03', etc).\nlet forcedAddr = null;\ntry {\n  if ((topic === 'force42' || topic === 'poll_now') && typeof msg.payload === 'string') {\n    const s = msg.payload.trim().toUpperCase().replace(/[^0-9A-F]/g,'');\n    if (s.length>=1 && s.length<=2) forcedAddr = parseInt(s,16) & 0xFF;\n  }\n} catch(e) {}\n\n\nlet state = flow.get('RS485_POLLSTATE') || { tick: 0, svcIdx: {} };\nlet svc;\nlet b0mod = null;\n\nif (topic === 'fast_tick' || payloadCmd === 'fast_tick') {\n  if (!fastMode) return null;\n  svc = 0x42;\n} else if (topic === 'force42' || topic === 'poll_now' || payloadCmd === 'poll_now') {\n  svc = 0x42;\n} else if (topic === 'force47' || topic === 'limits_now' || payloadCmd === 'limits_now') {\n  svc = 0x47;\n} else if (topic === 'force51' || payloadCmd === 'id_now') {\n  svc = 0x51;\n} else if (topic === 'force83' || payloadCmd === 'diag_now') {\n  svc = 0x83;\n} else if (topic === 'forceb03' || payloadCmd === 'b0m3_now') {\n  svc = 0xB0; b0mod = 0x03;\n} else if (topic === 'forceb04' || payloadCmd === 'b0m4_now') {\n  svc = 0xB0; b0mod = 0x04;\n} else {\n  state.tick++;\n  svc = 0x42;\n  if (state.tick % CFG.CYCLE_44 === 0) svc = 0x44;\n  if (state.tick % CFG.CYCLE_47 === 0) svc = 0x47;\n  if (state.tick % CFG.CYCLE_51 === 0) svc = 0x51;\n  if (state.tick % CFG.CYCLE_83 === 0) svc = 0x83;\n  if (state.tick % CFG.CYCLE_B03 === 0) { svc = 0xB0; b0mod = 0x03; }\n  if (state.tick % CFG.CYCLE_B04 === 0) { svc = 0xB0; b0mod = 0x04; }\n}\n\nconst key = String(svc) + (b0mod!=null?('_'+b0mod):'');\nlet a = null;\nif (forcedAddr != null) {\n  a = forcedAddr;\n} else {\n  if (state.svcIdx[key] == null) state.svcIdx[key] = 0;\n  const idx = state.svcIdx[key] % CFG.ADDRS.length;\n  state.svcIdx[key] = (state.svcIdx[key] + 1) % CFG.ADDRS.length;\n  a = CFG.ADDRS[idx];\n}\nconst adr = (CFG.GROUP ? (a + (CFG.GROUP<<4)) : a) & 0xFF;\n\nmsg._req = { adr, svc, b0mod, ts: now, proto: CFG.PROTOCOL };\nmsg.addr = adr.toString(16).toUpperCase().padStart(2,'0');\nmsg.service = svc;\nmsg.b0mod = b0mod;\nmsg.command = (svc===0x42 || svc===0x44) ? adr : null;\nif (svc===0x83 || svc===0xB0) node.warn(\"[SCHED] svc=\"+svc.toString(16).toUpperCase()+\" adr=\"+msg.addr+(b0mod!=null?\" mod=\"+b0mod:\"\"));\n\nflow.set('RS485_POLLSTATE', state);\nflow.set('RS485_LAST_REQ', msg._req);\nflow.set('RS485_BUSY', true);\nflow.set('RS485_LAST_SENT', now);\nreturn msg;",
+    "func": "// === CONFIG ===\nconst CFG = flow.get('RS485_POLL_CFG_DEYE') || {\n  PROTOCOL: 'PYLON_V3',\n  PORT: '/dev/ttyUSB0',\n  GROUP: 0,\n  ADDRS: [0x01,0x02,0x03,0x04],\n  INJECT_INTERVAL: \"60\",\n  CYCLE_42: 1,\n  CYCLE_44: 5,\n  CYCLE_47: 2,\n  CYCLE_51: 2,\n  CYCLE_83: 4,\n  CYCLE_B03: 6,\n  CYCLE_B04: 8\n};\n// Force address list (user wants 01..04 polled)\nCFG.ADDRS = [0x01,0x02,0x03,0x04];\nflow.set('RS485_POLL_CFG_DEYE', CFG);\n\nconst busy = flow.get('RS485_BUSY') || false;\nconst lastSentAt = flow.get('RS485_LAST_SENT') || 0;\nconst now = Date.now();\n// Strict single-inflight request gate: if we send a new request before the previous\n// response arrived, RS485_LAST_REQ gets overwritten and decoder can mis-classify frames\n// (then you see komische Werte in Status/Zellen).\nconst REQ_TIMEOUT_MS = 2000;\nif (busy) {\n  const age = now - lastSentAt;\n  if (age < REQ_TIMEOUT_MS) return null;\n  // timed out: unblock and continue\n  flow.set('RS485_BUSY', false);\n}\n\nconst topic = (msg.topic || '').toString();\nconst scanActive = flow.get('RS485_SCAN_ACTIVE') === true;\n// While scanning, pause normal polling injects so scan results are deterministic.\nif (scanActive && topic !== 'scan42') return null;\nconst payloadCmd = (typeof msg.payload === 'string') ? msg.payload.toLowerCase() : '';\nconst fastMode = flow.get('RS485_DEBUG_FAST') === true;\n// Optional: force an address for force42 injects (payload can be '01', '03', etc).\nlet forcedAddr = null;\ntry {\n  if ((topic === 'force42' || topic === 'poll_now' || topic === 'scan42') && typeof msg.payload === 'string') {\n    const s = msg.payload.trim().toUpperCase().replace(/[^0-9A-F]/g,'');\n    if (s.length>=1 && s.length<=2) forcedAddr = parseInt(s,16) & 0xFF;\n  }\n} catch(e) {}\n\n\nlet state = flow.get('RS485_POLLSTATE') || { tick: 0, svcIdx: {} };\nlet svc;\nlet b0mod = null;\n\nif (topic === 'fast_tick' || payloadCmd === 'fast_tick') {\n  if (!fastMode) return null;\n  svc = 0x42;\n} else if (topic === 'scan42' || topic === 'force42' || topic === 'poll_now' || payloadCmd === 'poll_now') {\n  svc = 0x42;\n} else if (topic === 'force47' || topic === 'limits_now' || payloadCmd === 'limits_now') {\n  svc = 0x47;\n} else if (topic === 'force51' || payloadCmd === 'id_now') {\n  svc = 0x51;\n} else if (topic === 'force83' || payloadCmd === 'diag_now') {\n  svc = 0x83;\n} else if (topic === 'forceb03' || payloadCmd === 'b0m3_now') {\n  svc = 0xB0; b0mod = 0x03;\n} else if (topic === 'forceb04' || payloadCmd === 'b0m4_now') {\n  svc = 0xB0; b0mod = 0x04;\n} else {\n  state.tick++;\n  svc = 0x42;\n  if (state.tick % CFG.CYCLE_44 === 0) svc = 0x44;\n  if (state.tick % CFG.CYCLE_47 === 0) svc = 0x47;\n  if (state.tick % CFG.CYCLE_51 === 0) svc = 0x51;\n  if (state.tick % CFG.CYCLE_83 === 0) svc = 0x83;\n  if (state.tick % CFG.CYCLE_B03 === 0) { svc = 0xB0; b0mod = 0x03; }\n  if (state.tick % CFG.CYCLE_B04 === 0) { svc = 0xB0; b0mod = 0x04; }\n}\n\nconst key = String(svc) + (b0mod!=null?('_'+b0mod):'');\nlet a = null;\nif (forcedAddr != null) {\n  a = forcedAddr;\n} else {\n  if (state.svcIdx[key] == null) state.svcIdx[key] = 0;\n  const idx = state.svcIdx[key] % CFG.ADDRS.length;\n  state.svcIdx[key] = (state.svcIdx[key] + 1) % CFG.ADDRS.length;\n  a = CFG.ADDRS[idx];\n}\nconst adr = (CFG.GROUP ? (a + (CFG.GROUP<<4)) : a) & 0xFF;\n\nmsg._req = { adr, svc, b0mod, ts: now, proto: CFG.PROTOCOL };\nmsg.addr = adr.toString(16).toUpperCase().padStart(2,'0');\nmsg.service = svc;\nmsg.b0mod = b0mod;\nmsg.command = (svc===0x42 || svc===0x44) ? adr : null;\nif (svc===0x83 || svc===0xB0) node.warn(\"[SCHED] svc=\"+svc.toString(16).toUpperCase()+\" adr=\"+msg.addr+(b0mod!=null?\" mod=\"+b0mod:\"\"));\n\nflow.set('RS485_POLLSTATE', state);\nflow.set('RS485_LAST_REQ', msg._req);\nflow.set('RS485_BUSY', true);\nflow.set('RS485_LAST_SENT', now);\nreturn msg;",
     "outputs": 1,
     "timeout": "",
     "noerr": 0,
@@ -10303,7 +10303,8 @@
       [
         "db-status",
         "lout_status_01",
-        "fn_rs485_status_to_influx"
+        "fn_rs485_status_to_influx",
+        "fn_rs485_scan_rec_33c2c3c8eacc4035"
       ],
       [
         "db-alarms",
@@ -16748,6 +16749,165 @@
     "wires": [
       [
         "fn-scheduler"
+      ]
+    ]
+  },
+  {
+    "id": "ui_btn_rs485_scan_start_521a70a460ec4567",
+    "type": "ui_button",
+    "z": "tab-rs485-poller",
+    "name": "RS485 Address Scan 0..32",
+    "group": "grp_rs485_service_auto",
+    "order": 20,
+    "width": 6,
+    "height": 1,
+    "passthru": false,
+    "label": "Scan RS485 0..32 (0x42)",
+    "tooltip": "One-shot: prueft welche Adressen antworten (Status 0x42). Normales Polling wird waehrenddessen pausiert.",
+    "color": "",
+    "bgcolor": "",
+    "icon": "search",
+    "payload": "start",
+    "payloadType": "str",
+    "topic": "scan_start",
+    "topicType": "str",
+    "x": 220,
+    "y": 120,
+    "wires": [
+      [
+        "fn_rs485_scan_ctrl_b38cff396bbb422f"
+      ]
+    ]
+  },
+  {
+    "id": "ui_btn_rs485_scan_stop_edc7c787fbbd4cbb",
+    "type": "ui_button",
+    "z": "tab-rs485-poller",
+    "name": "Stop Scan",
+    "group": "grp_rs485_service_auto",
+    "order": 21,
+    "width": 6,
+    "height": 1,
+    "passthru": false,
+    "label": "Stop Scan",
+    "tooltip": "Stoppt den Scan und aktiviert normales Polling wieder.",
+    "color": "white",
+    "bgcolor": "#c0392b",
+    "icon": "stop",
+    "payload": "stop",
+    "payloadType": "str",
+    "topic": "scan_stop",
+    "topicType": "str",
+    "x": 470,
+    "y": 120,
+    "wires": [
+      [
+        "fn_rs485_scan_ctrl_b38cff396bbb422f"
+      ]
+    ]
+  },
+  {
+    "id": "ui_txt_rs485_scan_status_e4a8a663351e4106",
+    "type": "ui_text",
+    "z": "tab-rs485-poller",
+    "group": "grp_rs485_service_auto",
+    "order": 22,
+    "width": 12,
+    "height": 6,
+    "name": "RS485 Scan Status",
+    "label": "RS485 Address Scan",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "x": 460,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "fn_rs485_scan_ctrl_b38cff396bbb422f",
+    "type": "function",
+    "z": "tab-rs485-poller",
+    "name": "RS485 Scan Controller (0..32)",
+    "func": "const topic = (msg.topic||'').toString();\nconst cmd = (msg.payload||'').toString();\n\nfunction fmt(seen, queue, startedAt, running, note) {\n  const seenList = Object.keys(seen||{}).sort();\n  const left = (queue||[]).length;\n  const elapsed = startedAt ? Math.max(0, (Date.now()-startedAt)/1000) : 0;\n  const line1 = running ? ('Running (' + elapsed.toFixed(1) + 's)') : 'Idle';\n  const line2 = 'Seen: ' + seenList.length + '  [' + (seenList.join(', ')||'-') + ']';\n  const line3 = running ? ('Remaining: ' + left) : 'Remaining: -';\n  const line4 = note ? String(note) : '';\n  return [line1, line2, line3, line4].filter(Boolean).join('\\n');\n}\n\nif (topic === 'scan_start' || cmd === 'start') {\n  const queue = [];\n  for (let a=0; a<=0x20; a++) queue.push(a);\n  const seen = {};\n  flow.set('RS485_SCAN_QUEUE', queue);\n  flow.set('RS485_SCAN_SEEN', seen);\n  flow.set('RS485_SCAN_STARTED_AT', Date.now());\n  flow.set('RS485_SCAN_ACTIVE', true);\n  return { payload: fmt(seen, queue, flow.get('RS485_SCAN_STARTED_AT'), true, 'Starting scan 0..32 (svc 0x42) ...') };\n}\n\nif (topic === 'scan_stop' || cmd === 'stop') {\n  flow.set('RS485_SCAN_ACTIVE', false);\n  const queue = flow.get('RS485_SCAN_QUEUE') || [];\n  const seen = flow.get('RS485_SCAN_SEEN') || {};\n  return { payload: fmt(seen, queue, flow.get('RS485_SCAN_STARTED_AT')||0, false, 'Stopped.') };\n}\n\nreturn null;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 340,
+    "y": 170,
+    "wires": [
+      [
+        "ui_txt_rs485_scan_status_e4a8a663351e4106"
+      ]
+    ]
+  },
+  {
+    "id": "inj_rs485_scan_tick_378b83276fb1492d",
+    "type": "inject",
+    "z": "tab-rs485-poller",
+    "name": "Scan Tick 250ms",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "0.25",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "1",
+    "topic": "scan_tick",
+    "payload": "tick",
+    "payloadType": "str",
+    "x": 210,
+    "y": 300,
+    "wires": [
+      [
+        "fn_rs485_scan_tick_db8117e39dc344a5"
+      ]
+    ]
+  },
+  {
+    "id": "fn_rs485_scan_tick_db8117e39dc344a5",
+    "type": "function",
+    "z": "tab-rs485-poller",
+    "name": "RS485 Scan Tick -> Scheduler (scan42)",
+    "func": "if (flow.get('RS485_SCAN_ACTIVE') !== true) return null;\n\nlet queue = flow.get('RS485_SCAN_QUEUE') || [];\nlet seen = flow.get('RS485_SCAN_SEEN') || {};\nlet startedAt = flow.get('RS485_SCAN_STARTED_AT') || 0;\n\n// Mirror scheduler timeout handling so scan continues even if a device never replies.\nconst busy = flow.get('RS485_BUSY') || false;\nconst lastSentAt = flow.get('RS485_LAST_SENT') || 0;\nconst now = Date.now();\nconst REQ_TIMEOUT_MS = 2100;\nif (busy) {\n  const age = now - lastSentAt;\n  if (age < REQ_TIMEOUT_MS) return null;\n  flow.set('RS485_BUSY', false);\n}\n\nfunction fmt(extra) {\n  const seenList = Object.keys(seen||{}).sort();\n  const left = (queue||[]).length;\n  const elapsed = startedAt ? Math.max(0, (Date.now()-startedAt)/1000) : 0;\n  const base = 'Running (' + elapsed.toFixed(1) + 's)\\n' +\n    'Seen: ' + seenList.length + '  [' + (seenList.join(', ')||'-') + ']\\n' +\n    'Remaining: ' + left;\n  return extra ? (base + '\\n' + extra) : base;\n}\n\nif (queue.length === 0) {\n  flow.set('RS485_SCAN_ACTIVE', false);\n  return [null, { payload: fmt('Done.') }];\n}\n\nconst a = queue.shift() & 0xFF;\nflow.set('RS485_SCAN_QUEUE', queue);\n\nconst hex = a.toString(16).toUpperCase().padStart(2,'0');\n\nconst toSched = { topic: 'scan42', payload: hex };\nconst toUi = { payload: fmt('TX: adr=' + hex) };\nreturn [toSched, toUi];",
+    "outputs": 2,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 520,
+    "y": 300,
+    "wires": [
+      [
+        "fn-scheduler"
+      ],
+      [
+        "ui_txt_rs485_scan_status_e4a8a663351e4106"
+      ]
+    ]
+  },
+  {
+    "id": "fn_rs485_scan_rec_33c2c3c8eacc4035",
+    "type": "function",
+    "z": "tab-rs485-poller",
+    "name": "RS485 Scan Recorder (from decoded status)",
+    "func": "if (flow.get('RS485_SCAN_ACTIVE') !== true) return null;\n\nconst topic = (msg.topic||'').toString();\nconst m = topic.match(/rs485\\/bms\\/([0-9A-Fa-f]{2})\\/status/);\nif (!m) return null;\nconst adr = m[1].toUpperCase();\n\nlet seen = flow.get('RS485_SCAN_SEEN') || {};\nseen[adr] = Date.now();\nflow.set('RS485_SCAN_SEEN', seen);\n\nlet queue = flow.get('RS485_SCAN_QUEUE') || [];\nconst startedAt = flow.get('RS485_SCAN_STARTED_AT') || 0;\nconst elapsed = startedAt ? Math.max(0,(Date.now()-startedAt)/1000) : 0;\nconst seenList = Object.keys(seen).sort();\n\nreturn {\n  payload: 'Running (' + elapsed.toFixed(1) + 's)\\n' +\n    'Seen: ' + seenList.length + '  [' + (seenList.join(', ')||'-') + ']\\n' +\n    'Remaining: ' + queue.length + '\\n' +\n    'RX: adr=' + adr\n};",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 640,
+    "y": 380,
+    "wires": [
+      [
+        "ui_txt_rs485_scan_status_e4a8a663351e4106"
       ]
     ]
   }

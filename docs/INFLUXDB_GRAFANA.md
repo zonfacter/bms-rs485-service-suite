@@ -28,6 +28,11 @@ influx -execute \"CREATE RETENTION POLICY rp48h ON bms DURATION 48h REPLICATION 
 influx -database bms -execute 'SHOW RETENTION POLICIES ON bms'
 ```
 
+Wenn du die Daten dauerhaft behalten willst, kannst du die RP spaeter auf unbegrenzt stellen (Dashboard/Queries koennen gleich bleiben):
+```bash
+influx -execute \"ALTER RETENTION POLICY rp48h ON bms DURATION INF REPLICATION 1\"
+```
+
 Im Flow `JK BLE` wird in folgendes Measurement geschrieben:
 - Measurement: `jk_ble`
 - Database: `bms`
