@@ -1,0 +1,18 @@
+[Unit]
+Description=BLE Scanner Store (JSON + MQTT)
+After=network-online.target bluetooth.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=black
+Group=black
+WorkingDirectory=/home/black/bms-rs485-service-suite
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/black/bms-rs485-service-suite/.venv/bin/python -u /home/black/bms-rs485-service-suite/tools/ble_scan_store.py --config /home/black/bms-rs485-service-suite/config/ble_scan_store.json
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
