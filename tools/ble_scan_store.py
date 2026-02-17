@@ -219,6 +219,14 @@ class MqttPub:
 async def run_loop(cfg_path: str) -> int:
     cfg = _read_cfg(cfg_path)
     current_adapter = (cfg.get("adapter") or "").strip() or None
+    adapter_cycle_cfg = cfg.get("adapter_cycle")
+    adapter_cycle: list[str] = []
+    if isinstance(adapter_cycle_cfg, list):
+        for a in adapter_cycle_cfg:
+            s = str(a or "").strip()
+            if s:
+                adapter_cycle.append(s)
+    cycle_idx = 0
     timeout_s = float(cfg.get("scan_timeout_s", 15.0))
     interval_s = float(cfg.get("interval_s", 60.0))
     min_rssi = int(cfg.get("min_rssi", -127))
@@ -246,6 +254,9 @@ async def run_loop(cfg_path: str) -> int:
             if mqtt_pub.requested_adapter is not None:
                 current_adapter = mqtt_pub.requested_adapter
                 mqtt_pub.requested_adapter = None
+            elif adapter_cycle:
+                current_adapter = adapter_cycle[cycle_idx % len(adapter_cycle)]
+                cycle_idx += 1
             try:
                 devices = await run_scan(adapter=current_adapter, timeout_s=timeout_s, min_rssi=min_rssi)
             except Exception as e:  # pragma: no cover

@@ -7,20 +7,41 @@
     "client_id": "daly-ble-gateway-rpi5",
     "base_topic": "bms"
   },
+  "sample_interval_s": 15,
+  "publish_interval_s": 15,
   "poll_interval_s": 15,
   "scan_timeout_s": 15,
-  "timeout_s": 15,
+  "timeout_s": 20,
+  "stale_after_s": 60,
+  "publish_on_change": true,
+  "min_publish_interval_on_change_s": 2,
+  "keep_last_good_on_error": true,
+  "adapter_autoswitch": true,
+  "bt_reset_on_failures": 0,
+  "bt_reset_cooldown_s": 300,
+  "group_enabled": true,
+  "group_name": "fleet",
+  "group_publish_interval_s": 15,
+  "group_soc_low_pct": 70,
+  "group_soc_high_pct": 80,
   "devices": [
+    {
+      "name": "akku1",
+      "address": "40:17:10:01:03:8A",
+      "adapter": "hci2",
+      "adapter_fallbacks": ["hci1", "hci0"]
+    },
     {
       "name": "akku2",
       "address": "40:17:10:01:06:C7",
-      "adapter": "hci1"
+      "adapter": "hci2",
+      "adapter_fallbacks": ["hci1", "hci0"]
     },
     {
       "name": "akku3",
       "address": "40:17:10:01:03:C2",
-      "adapter": "hci1"
+      "adapter": "hci2",
+      "adapter_fallbacks": ["hci1", "hci0"]
     }
   ]
 }
-

@@ -1,37 +1,32 @@
 # BMS RS485 Service Suite (Raspberry Pi + Node-RED)
 
-Node-RED Erweiterung fuer Deye/Pylontech-kompatible BMS-Kommunikation ueber RS485.
+Node-RED/Service-Suite fuer:
+- RS485 BMS (Deye/Pylontech kompatibel)
+- JK BLE via MQTT Gateway
+- DALY BLE via MQTT Gateway
+- InfluxDB + Grafana
 
-## Enthalten
-- Service-Tab `RS485 Service` mit:
-- `Service Presets` (GET_42/44/47/51/83, GET_B0_INFO, GET_B0_CAP, CTRL_45_0D/0F)
-- `Profil -> BMS schreiben (CID2=49)` fuer Kern-Limits
-- Expert-Frame-Builder
-- Decoder-Erweiterungen fuer Set-ACK auf Services `49`, `45`, `8B`
-- JK-BMS BLE -> MQTT Gateway (stabile Daten fuer Node-RED + andere Systeme)
-- DALY SmartBMS / DALY Balancer BLE -> MQTT Gateway (Akku-1/2/3)
-- InfluxDB Export (Retention `rp48h`) fuer JK BLE, DALY BLE und RS485 + fertiges Grafana Dashboard JSON
-- Dokumentation fuer Betrieb, Sicherheit und Troubleshooting
+## Highlights
+- DALY Gateway mit Adapter-Fallback (`hci2 -> hci1 -> hci0`), Stale/Online State, Sample-/Publish-Trennung
+- DALY Fleet Aggregation (`bms/daly/fleet/raw`) inkl. SoC-Hysterese
+- BLE Scanner Store mit HCI-Rotation und RSSI-Auswertung
+- InfluxDB Export fuer JK, DALY, RS485 (inkl. Zellspannungen)
+- Grafana Dashboard Import JSON enthalten
 
 ## Schnellstart
-1. Dashboard oeffnen: `http://<dein-pi>:1880/ui`
-2. Tab `RS485 Service` aufrufen
-3. Immer zuerst mit `Dry-Run` testen
-4. Danach erst echte Schreibvorgaenge (`Dry-Run` aus)
+1. Node-RED UI: `http://<pi-ip>:1880/ui`
+2. DALY/JK Services starten (`systemctl status ...`)
+3. MQTT pruefen (`mosquitto_sub -t 'bms/#' -v`)
+4. Grafana Dashboard importieren (`grafana/bms-influxdb-rp48h-dashboard.json`)
 
-## Wichtige Sicherheit
-- Schreib-Frames aendern BMS-Parameter dauerhaft.
-- Nur plausible Werte schreiben.
-- Vor jeder Aenderung `flows.json` sichern.
+## Dokumentation
+- Einstieg: `docs/INDEX.md`
+- DALY Gateway: `docs/MQTT_GATEWAY_DALY_BLE.md`
+- BLE Scan Store: `docs/BLE_SCAN_STORE.md`
+- Influx/Grafana: `docs/INFLUXDB_GRAFANA.md`
+- Third-Party/Lizenzen: `docs/THIRD_PARTY_SOURCES.md`
+- Changelog: `CHANGELOG.md`
 
-## Dateistruktur
-- `docs/INDEX.md` Inhaltsverzeichnis (Start hier)
-- `docs/DASHBOARD_SERVICE.md` Bedienung Service-Seite
-- `docs/MQTT_GATEWAY_JK_BLE.md` JK BLE via MQTT (Topics + Service + Schema)
-- `docs/MQTT_GATEWAY_DALY_BLE.md` DALY BLE via MQTT (Topics + Service + Schema)
-- `docs/PROTOCOL_RS485_1363.md` Reverse-Engineering / Service-Mapping (Frameformat, CRC, Layouts, Snippets)
-- `docs/DEPLOY_NODE_RED.md` Backup, Restore, Restart
-- `docs/INFLUXDB_GRAFANA.md` InfluxDB + Grafana (Schema + Queries)
-- `docs/GRAFANA_IMPORT.md` Dashboard Import
-- `node-red/flows.rs485-service.snapshot.json` Flow-Snapshot
-- `scripts/backup-flows.sh` Backup-Helper
+## Versionierung
+- SemVer Tags (`vMAJOR.MINOR.PATCH`)
+- Aktuelle Version: siehe `VERSION`
