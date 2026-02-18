@@ -19,10 +19,19 @@ Node-RED/Service-Suite fuer:
 3. MQTT pruefen (`mosquitto_sub -t 'bms/#' -v`)
 4. Grafana Dashboard importieren (`grafana/bms-influxdb-rp48h-dashboard.json`)
 
+## Interaktive Installation
+Ein Installationsskript mit Benutzerfuehrung ist enthalten:
+
+```bash
+cd /home/black/bms-rs485-service-suite
+bash scripts/install_suite.sh
+```
+
 ## Dokumentation
 - Einstieg: `docs/INDEX.md`
 - DALY Gateway: `docs/MQTT_GATEWAY_DALY_BLE.md`
 - BLE Scan Store: `docs/BLE_SCAN_STORE.md`
+- Installation (Assistent): `docs/INSTALLATION_ASSISTANT.md`
 - Influx/Grafana: `docs/INFLUXDB_GRAFANA.md`
 - Third-Party/Lizenzen: `docs/THIRD_PARTY_SOURCES.md`
 - Changelog: `CHANGELOG.md`

@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.0.1 - 2026-02-18
+
+### Added
+- Interaktives Installationsskript mit Benutzerfuehrung:
+  - `scripts/install_suite.sh`
+  - Schrittweise Ja/Nein-Fuehrung fuer Service-Install, Config-Setup, Statuschecks
+
+### Documentation
+- Neue Anleitung:
+  - `docs/INSTALLATION_ASSISTANT.md`
+- README um Abschnitt "Interaktive Installation" erweitert.
+- Doku-Index (`docs/INDEX.md`) um Installations-Assistent ergaenzt.
+
 ## v1.0.0 - 2026-02-17
 
 ### Added
