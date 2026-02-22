@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.3 - 2026-02-22
+
+### Added
+- Interaktives Downgrade-Skript:
+  - `scripts/downgrade.sh`
+  - waehlt Release-Tag aus und fuehrt sicheren Rollback auf Tag durch
+  - optionaler Neustart der relevanten Dienste nach Downgrade
+
+### Documentation
+- README um Abschnitt \"Downgrade (Interaktiv)\" erweitert.
+
 ## v1.0.2 - 2026-02-22
 
 ### Added

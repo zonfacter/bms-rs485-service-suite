@@ -27,6 +27,26 @@ cd /home/black/bms-rs485-service-suite
 bash scripts/install_suite.sh
 ```
 
+## Downgrade (Interaktiv)
+Fuer Rollback auf eine fruehere Release-Version:
+
+```bash
+cd /home/black/bms-rs485-service-suite
+bash scripts/downgrade.sh
+```
+
+Optional direkt mit Zielversion:
+
+```bash
+bash scripts/downgrade.sh v1.0.1
+```
+
+Das Skript:
+- aktualisiert Tags vom Remote
+- fuehrt dich zur Zielversion
+- wechselt auf das Release-Tag (detached HEAD)
+- startet optional die relevanten Dienste neu
+
 ## Dokumentation
 - Einstieg: `docs/INDEX.md`
 - DALY Gateway: `docs/MQTT_GATEWAY_DALY_BLE.md`
