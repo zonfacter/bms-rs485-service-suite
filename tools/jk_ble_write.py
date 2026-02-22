@@ -14,10 +14,14 @@ WARNING:
 
 import argparse
 import asyncio
+import fcntl
 import json
+import os
+import subprocess
+import sys
 import time
 
-from bleak import BleakClient
+from bleak import BleakClient, BleakScanner
 
 CHAR_UUID = "0000ffe1-0000-1000-8000-00805f9b34fb"
 CHAR_HANDLE_FAILOVER = 4
@@ -149,6 +153,27 @@ async def try_auth_sequences(client: BleakClient, pwd: str) -> list[dict]:
     return out
 
 
+def try_reset_adapter(adapter: str | None) -> dict:
+    """
+    Best-effort adapter reset for BlueZ 'Operation already in progress' situations.
+    """
+    if not adapter:
+        return {"ok": False, "reason": "no_adapter"}
+    cmds = (
+        ["hciconfig", adapter, "reset"],
+        ["sudo", "-n", "hciconfig", adapter, "reset"],
+    )
+    for cmd in cmds:
+        try:
+            p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=8, check=False)
+            if p.returncode == 0:
+                return {"ok": True, "cmd": " ".join(cmd)}
+        except Exception as e:
+            last = repr(e)
+            continue
+    return {"ok": False, "reason": "reset_failed"}
+
+
 def pick_reg(proto: str, reg24, reg32):
     if proto == PROTO_JK02_32S:
         return reg32
@@ -185,6 +210,8 @@ async def main():
     ap.add_argument("--address", required=True)
     ap.add_argument("--timeout", type=float, default=20.0)
     ap.add_argument("--adapter", default=None, help="BlueZ adapter name, e.g. hci1")
+    ap.add_argument("--scan-timeout", type=float, default=8.0, help="Optional scan fallback before connect")
+    ap.add_argument("--connect-retries", type=int, default=2, help="Connect retries on timeout/errors")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--proto", default="auto", help="auto|jk02_24s|jk02_32s")
     ap.add_argument("--auth-pwd", default=None, help="Experimental auth password (e.g. 123456) before writes")
@@ -272,48 +299,101 @@ async def main():
 
     results = {"address": args.address, "adapter": args.adapter, "ts": time.time(), "ops": []}
 
-    async with BleakClient(args.address, timeout=args.timeout, adapter=args.adapter) as client:
-        if args.auth_pwd:
-            results["auth_attempts"] = await try_auth_sequences(client, args.auth_pwd)
-            await asyncio.sleep(0.2)
-        # pick write characteristic
-        try:
-            # read properties by trying notify start is overkill; just try write UUID.
-            write_target = CHAR_UUID
-        except Exception:
-            write_target = CHAR_HANDLE_FAILOVER
-
-        # Determine which target works by attempting a harmless 0-length write? not possible.
-        # We'll try UUID first, fallback to handle on BleakError.
-        async def wr(reg, vals4, length, await_s=0.0):
+    # Serialize BLE writes with other BLE workers (JK/DALY gateway/scanner).
+    lock_path = os.environ.get("BMS_BLE_LOCK_PATH", "/tmp/bms_ble.lock")
+    lock_timeout_s = max(30.0, float(args.timeout) + float(max(0.0, args.scan_timeout)) + 10.0)
+    lock_deadline = time.time() + lock_timeout_s
+    lock_f = open(lock_path, "w", encoding="utf-8")
+    try:
+        while True:
             try:
-                return await write_register(client, CHAR_UUID, reg, vals4, length, await_s=await_s)
-            except Exception:
-                return await write_register(client, CHAR_HANDLE_FAILOVER, reg, vals4, length, await_s=await_s)
+                fcntl.flock(lock_f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.time() >= lock_deadline:
+                    raise TimeoutError("BLE lock timeout")
+                await asyncio.sleep(0.2)
 
-        results["proto"] = proto
+        scan_t = max(0.0, min(float(args.scan_timeout), float(args.timeout)))
+        dev = None
+        last_err = None
+        did_recover_inprogress = False
+        tries = max(1, int(args.connect_retries) + 1)
+        for i in range(tries):
+            if dev is None and scan_t > 0:
+                try:
+                    if args.adapter:
+                        dev = await BleakScanner.find_device_by_address(
+                            args.address, timeout=scan_t, adapter=args.adapter
+                        )
+                    else:
+                        dev = await BleakScanner.find_device_by_address(args.address, timeout=scan_t)
+                except Exception:
+                    dev = None
 
-        for op, key, val in ops:
-            if op == "num":
-                reg, vals4, length, meta = build_number_write(proto, key, val)
-                results["ops"].append({"op": "set_number", **meta, "reg": reg, "write": await wr(reg, vals4, length, await_s=0.4)})
-            elif op == "sw":
-                reg, vals4, length, meta = build_switch_write(proto, key, val)
-                results["ops"].append({"op": "set_switch", **meta, "reg": reg, "write": await wr(reg, vals4, length, await_s=0.4)})
-            elif op == "soc_reset":
-                if args.max_cell_v is None:
-                    raise SystemExit("--soc-reset requires --max-cell-v (for now)")
-                ovp_trigger = round(args.max_cell_v - 0.05, 3)
-                ovpr_trigger = round(args.max_cell_v - 0.10, 3)
-                r_ovpr, v_ovpr, l_ovpr, _ = build_number_write(proto, "cell_ovpr_v", ovpr_trigger)
-                r_ovp, v_ovp, l_ovp, _ = build_number_write(proto, "cell_ovp_v", ovp_trigger)
-                w1 = await wr(r_ovpr, v_ovpr, l_ovpr, await_s=0.5)
-                w2 = await wr(r_ovp, v_ovp, l_ovp, await_s=0.5)
-                await asyncio.sleep(5)
-                results["ops"].append({"op": "soc_reset", "max_cell_v": args.max_cell_v, "ovpr_trigger": ovpr_trigger, "ovp_trigger": ovp_trigger, "writes": [w1, w2]})
+            target = dev or args.address
+            try:
+                async with BleakClient(target, timeout=args.timeout, adapter=args.adapter) as client:
+                    if args.auth_pwd:
+                        results["auth_attempts"] = await try_auth_sequences(client, args.auth_pwd)
+                        await asyncio.sleep(0.2)
+
+                    async def wr(reg, vals4, length, await_s=0.0):
+                        try:
+                            return await write_register(client, CHAR_UUID, reg, vals4, length, await_s=await_s)
+                        except Exception:
+                            return await write_register(client, CHAR_HANDLE_FAILOVER, reg, vals4, length, await_s=await_s)
+
+                    results["proto"] = proto
+
+                    for op, key, val in ops:
+                        if op == "num":
+                            reg, vals4, length, meta = build_number_write(proto, key, val)
+                            results["ops"].append({"op": "set_number", **meta, "reg": reg, "write": await wr(reg, vals4, length, await_s=0.4)})
+                        elif op == "sw":
+                            reg, vals4, length, meta = build_switch_write(proto, key, val)
+                            results["ops"].append({"op": "set_switch", **meta, "reg": reg, "write": await wr(reg, vals4, length, await_s=0.4)})
+                        elif op == "soc_reset":
+                            if args.max_cell_v is None:
+                                raise SystemExit("--soc-reset requires --max-cell-v (for now)")
+                            ovp_trigger = round(args.max_cell_v - 0.05, 3)
+                            ovpr_trigger = round(args.max_cell_v - 0.10, 3)
+                            r_ovpr, v_ovpr, l_ovpr, _ = build_number_write(proto, "cell_ovpr_v", ovpr_trigger)
+                            r_ovp, v_ovp, l_ovp, _ = build_number_write(proto, "cell_ovp_v", ovp_trigger)
+                            w1 = await wr(r_ovpr, v_ovpr, l_ovpr, await_s=0.5)
+                            w2 = await wr(r_ovp, v_ovp, l_ovp, await_s=0.5)
+                            await asyncio.sleep(5)
+                            results["ops"].append({"op": "soc_reset", "max_cell_v": args.max_cell_v, "ovpr_trigger": ovpr_trigger, "ovp_trigger": ovp_trigger, "writes": [w1, w2]})
+                break
+            except Exception as e:
+                last_err = e
+                if ("InProgress" in repr(e) or "Operation already in progress" in str(e)) and not did_recover_inprogress:
+                    rec = try_reset_adapter(args.adapter)
+                    results["adapter_recovery"] = rec
+                    did_recover_inprogress = True
+                    await asyncio.sleep(1.5)
+                    continue
+                # clear cached scan result and try again
+                dev = None
+                if i < tries - 1:
+                    await asyncio.sleep(0.8)
+                else:
+                    raise last_err
+    finally:
+        try:
+            fcntl.flock(lock_f.fileno(), fcntl.LOCK_UN)
+        except Exception:
+            pass
+        lock_f.close()
 
     print(json.dumps(results, ensure_ascii=False))
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(json.dumps({"error": {"type": type(e).__name__, "message": str(e)}}, ensure_ascii=False))
+        sys.exit(2)
