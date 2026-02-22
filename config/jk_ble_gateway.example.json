@@ -10,6 +10,8 @@
   "poll_interval_s": 10,
   "scan_timeout_s": 0,
   "timeout_s": 20,
+  "bt_reset_on_failures": 2,
+  "bt_reset_cooldown_s": 180,
   "devices": [
     {
       "name": "jk1",
@@ -18,4 +20,3 @@
     }
   ]
 }
-

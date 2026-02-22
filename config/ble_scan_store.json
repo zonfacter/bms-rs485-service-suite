@@ -1,6 +1,9 @@
 {
   "adapter": "hci0",
-  "adapter_cycle": ["hci0", "hci1", "hci2"],
+  "adapter_cycle": [
+    "hci0",
+    "hci1"
+  ],
   "scan_timeout_s": 15,
   "interval_s": 60,
   "min_rssi": -100,

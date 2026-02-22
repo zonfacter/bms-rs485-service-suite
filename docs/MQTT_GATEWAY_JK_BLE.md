@@ -33,6 +33,8 @@ Wichtige Felder:
 - `poll_interval_s` (z.B. 10)
 - `timeout_s` (Read-Timeout je Poll, z.B. 20)
 - `scan_timeout_s` (Scan-Zeit, wenn BlueZ Cache leer ist; z.B. 5)
+- `bt_reset_on_failures` (ab wie vielen Fehlern Auto-Recovery versucht wird; 0=aus)
+- `bt_reset_cooldown_s` (Mindestabstand zwischen automatischen Adapter-Resets)
 - `devices[]`:
   - `name`: z.B. `jk1`
   - `address`: BLE MAC, z.B. `C8:47:80:37:02:E8`
@@ -71,7 +73,7 @@ mosquitto_pub -h 127.0.0.1 -t 'bms/jk/jk1/cmd/read' -n
 
 Runtime-Config (Adapter/Pollrate/Timeouts):
 ```bash
-mosquitto_pub -h 127.0.0.1 -t 'bms/jk/jk1/cmd/config' -m '{\"adapter\":\"hci0\",\"poll_interval_s\":10}'
+mosquitto_pub -h 127.0.0.1 -t 'bms/jk/jk1/cmd/config' -m '{\"adapter\":\"hci2\",\"poll_interval_s\":15,\"timeout_s\":30,\"scan_timeout_s\":15,\"bt_reset_on_failures\":2,\"bt_reset_cooldown_s\":180}'
 ```
 
 Unterstuetzte Felder (alle optional):
@@ -80,6 +82,8 @@ Unterstuetzte Felder (alle optional):
 - `poll_interval_s`
 - `timeout_s`
 - `scan_timeout_s`
+- `bt_reset_on_failures`
+- `bt_reset_cooldown_s`
 
 ## Payload Schema (raw)
 
@@ -161,3 +165,9 @@ Fix:
 ```bash
 sudo systemctl restart jk-ble-mqtt-gateway
 ```
+
+Auto-Recovery:
+- Das Gateway kann bei typischen BlueZ-Haengern (`InProgress`, `Notify acquired`) den konfigurierten Adapter automatisch resetten und einmal erneut lesen.
+- Steuerung ueber:
+  - `bt_reset_on_failures`
+  - `bt_reset_cooldown_s`

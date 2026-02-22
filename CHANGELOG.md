@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0.2 - 2026-02-22
+
+### Added
+- JK BLE Gateway Auto-Recovery:
+  - erkennt typische BlueZ-Haenger (`InProgress`, `Notify acquired`)
+  - fuehrt Adapter-Reset mit Cooldown aus
+  - macht einen direkten Retry-Read nach Reset
+- Neue JK Config-Felder:
+  - `bt_reset_on_failures`
+  - `bt_reset_cooldown_s`
+
+### Changed
+- JK Gateway Runtime-Config (`cmd/config`) erweitert um Auto-Recovery Parameter.
+- JK Doku um Auto-Recovery und neue Konfigurationsfelder ergaenzt.
+- BLE Scan Konfiguration angepasst, um Kollisionen auf `hci2` zu reduzieren.
+
 ## v1.0.1 - 2026-02-18
 
 ### Added

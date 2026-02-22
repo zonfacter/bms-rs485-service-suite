@@ -37,6 +37,12 @@ import paho.mqtt.client as mqtt
 def _now() -> float:
     return time.time()
 
+
+def _is_hci(adapter: Optional[str]) -> bool:
+    if not adapter:
+        return False
+    return adapter.startswith("hci") and adapter[3:].isdigit()
+
 def _with_ble_lock(fn, *, timeout_s: float = 30.0):
     """
     Serialize BLE operations across multiple processes (JK gateway + DALY gateway).
@@ -143,6 +149,8 @@ class Gateway:
         self.poll_interval_s = float(cfg.get("poll_interval_s", 10))
         self.timeout_s = float(cfg.get("timeout_s", 20))
         self.scan_timeout_s = float(cfg.get("scan_timeout_s", 0))
+        self.bt_reset_on_failures = int(cfg.get("bt_reset_on_failures", 2))
+        self.bt_reset_cooldown_s = float(cfg.get("bt_reset_cooldown_s", 180))
 
         self.devices = []
         for d in (cfg.get("devices") or []):
@@ -156,6 +164,11 @@ class Gateway:
 
         self._cmdq: "queue.Queue[tuple[str, str, Optional[Dict[str, Any]]]]" = queue.Queue()
         self._stop = threading.Event()
+        self._failures: Dict[str, int] = {}
+        self._last_reset_ts: Dict[str, float] = {}
+        for d in self.devices:
+            self._failures[d.name] = 0
+            self._last_reset_ts[d.name] = 0.0
 
         self._client = mqtt.Client(client_id=self.client_id, clean_session=True)
         self._client.enable_logger()
@@ -220,6 +233,8 @@ class Gateway:
             cfg["poll_interval_s"] = self.poll_interval_s
             cfg["timeout_s"] = self.timeout_s
             cfg["scan_timeout_s"] = self.scan_timeout_s
+            cfg["bt_reset_on_failures"] = self.bt_reset_on_failures
+            cfg["bt_reset_cooldown_s"] = self.bt_reset_cooldown_s
             cfg["devices"] = [{"name": d.name, "address": d.address, "adapter": d.adapter} for d in self.devices]
             tmp = self.config_path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
@@ -233,6 +248,28 @@ class Gateway:
     def connect(self) -> None:
         self._client.connect(self.mqtt_host, self.mqtt_port, keepalive=30)
         self._client.loop_start()
+
+    def _is_recoverable_error(self, payload: Dict[str, Any]) -> bool:
+        err = payload.get("error") if isinstance(payload.get("error"), dict) else {}
+        et = str(err.get("type") or "")
+        em = str(err.get("message") or "")
+        text = f"{et} {em}".lower()
+        markers = [
+            "org.bluez.error.inprogress",
+            "operation already in progress",
+            "notify acquired",
+            "org.bluez.error.notpermitted",
+        ]
+        return any(m in text for m in markers)
+
+    def _reset_adapter(self, adapter: Optional[str]) -> bool:
+        if not _is_hci(adapter):
+            return False
+        try:
+            p = subprocess.run(["hciconfig", str(adapter), "reset"], capture_output=True, text=True, timeout=8)
+            return p.returncode == 0
+        except Exception:
+            return False
 
     def close(self) -> None:
         self._stop.set()
@@ -303,6 +340,20 @@ class Gateway:
                                         self.scan_timeout_s = v
                                 except Exception:
                                     pass
+                            if "bt_reset_on_failures" in payload:
+                                try:
+                                    v = int(payload["bt_reset_on_failures"])
+                                    if v >= 0:
+                                        self.bt_reset_on_failures = v
+                                except Exception:
+                                    pass
+                            if "bt_reset_cooldown_s" in payload:
+                                try:
+                                    v = float(payload["bt_reset_cooldown_s"])
+                                    if v >= 0:
+                                        self.bt_reset_cooldown_s = v
+                                except Exception:
+                                    pass
 
                             self._save_cfg()
                 except queue.Empty:
@@ -322,8 +373,37 @@ class Gateway:
                         timeout_s=self.timeout_s,
                         scan_timeout_s=self.scan_timeout_s,
                     )
-
                     ok = bool(payload.get("connected")) and not payload.get("error")
+                    if ok:
+                        self._failures[dev.name] = 0
+                    else:
+                        self._failures[dev.name] = int(self._failures.get(dev.name, 0)) + 1
+                        if (
+                            self.bt_reset_on_failures > 0
+                            and self._failures[dev.name] >= self.bt_reset_on_failures
+                            and self._is_recoverable_error(payload)
+                        ):
+                            now_r = _now()
+                            last_r = float(self._last_reset_ts.get(dev.name, 0.0))
+                            if (now_r - last_r) >= self.bt_reset_cooldown_s:
+                                if self._reset_adapter(dev.adapter):
+                                    self._last_reset_ts[dev.name] = now_r
+                                    # one immediate retry after reset
+                                    payload_retry = _run_read(
+                                        python=self.python,
+                                        address=dev.address,
+                                        adapter=dev.adapter,
+                                        timeout_s=self.timeout_s,
+                                        scan_timeout_s=self.scan_timeout_s,
+                                    )
+                                    ok_retry = bool(payload_retry.get("connected")) and not payload_retry.get("error")
+                                    if ok_retry:
+                                        payload = payload_retry
+                                        ok = True
+                                        self._failures[dev.name] = 0
+                                    else:
+                                        payload = payload_retry
+                                        ok = False
                     self._publish_json(self._t(dev, "raw"), payload, retain=False)
                     self._client.publish(self._t(dev, "online"), payload=("true" if ok else "false"), qos=1, retain=True)
 
