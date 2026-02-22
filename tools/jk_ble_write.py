@@ -103,6 +103,52 @@ async def write_register(client: BleakClient, write_target, reg: int, vals4: byt
     return {"reg": reg, "len": length, "data": vals4[:length].hex(), "frame": frame.hex()}
 
 
+def build_cmd_frame(cmd: int, payload: bytes = b"") -> bytearray:
+    """
+    Build a JK BLE command frame (same 20-byte envelope used for read commands).
+    """
+    payload = bytes(payload or b"")
+    payload = payload[:13]  # max bytes that still fit before CRC
+    frame = bytearray(20)
+    frame[0] = 0xAA
+    frame[1] = 0x55
+    frame[2] = 0x90
+    frame[3] = 0xEB
+    frame[4] = cmd & 0xFF
+    frame[5] = len(payload) & 0xFF
+    frame[6 : 6 + len(payload)] = payload
+    frame[19] = crc_simple(frame, 19)
+    return frame
+
+
+async def try_auth_sequences(client: BleakClient, pwd: str) -> list[dict]:
+    """
+    Experimental auth attempts for firmwares that require an app-style authorize step.
+    No hard failure here: writes can still proceed for devices that do not require auth.
+    """
+    pw = (pwd or "").strip()
+    if not pw:
+        return []
+    b = pw.encode("ascii", errors="ignore")
+    attempts = [
+        ("ascii", b),
+        ("ascii_crlf", b + b"\r\n"),
+        ("cmd97_pw", build_cmd_frame(0x97, b)),
+        ("cmd95_pw", build_cmd_frame(0x95, b)),
+    ]
+    out = []
+    for name, payload in attempts:
+        for target in (CHAR_UUID, CHAR_HANDLE_FAILOVER):
+            try:
+                await client.write_gatt_char(target, payload, response=False)
+                out.append({"name": name, "target": str(target), "ok": True, "hex": bytes(payload).hex()})
+                await asyncio.sleep(0.12)
+                break
+            except Exception as e:
+                out.append({"name": name, "target": str(target), "ok": False, "error": repr(e)})
+    return out
+
+
 def pick_reg(proto: str, reg24, reg32):
     if proto == PROTO_JK02_32S:
         return reg32
@@ -141,6 +187,7 @@ async def main():
     ap.add_argument("--adapter", default=None, help="BlueZ adapter name, e.g. hci1")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--proto", default="auto", help="auto|jk02_24s|jk02_32s")
+    ap.add_argument("--auth-pwd", default=None, help="Experimental auth password (e.g. 123456) before writes")
 
     # Numbers (cell-based voltages/currents)
     ap.add_argument("--set-uvp", type=float, default=None, help="Cell UVP in V")
@@ -226,6 +273,9 @@ async def main():
     results = {"address": args.address, "adapter": args.adapter, "ts": time.time(), "ops": []}
 
     async with BleakClient(args.address, timeout=args.timeout, adapter=args.adapter) as client:
+        if args.auth_pwd:
+            results["auth_attempts"] = await try_auth_sequences(client, args.auth_pwd)
+            await asyncio.sleep(0.2)
         # pick write characteristic
         try:
             # read properties by trying notify start is overkill; just try write UUID.
